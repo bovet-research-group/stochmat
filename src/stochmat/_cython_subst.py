@@ -41,7 +41,7 @@ def sparse_stoch_from_full_csr(nz_rowcols,
             diag_val)
 
 
-def inplace_csr_row_normalize(Tf_data, Tf_indptr, n_row: int, row_sum:float):
+def inplace_csr_row_normalize(Tf_data, Tf_indptr, n_row: int, row_sum: float):
     """Row normalize a scipy sparse csr matrix inplace
     """
     for i in range(n_row):
@@ -70,7 +70,7 @@ class SPA:
         self.LS = list()
         self.current_row = current_row
 
-    def scatter(self, value, pos ):
+    def scatter(self, value, pos):
 
         if self.b[pos] < self.current_row:
             self.w[pos] = value
@@ -530,7 +530,7 @@ def cython_compute_delta_S_moveout(PTdata,
         s += p1[idx[i]]*p2[k]
     s -= p1[k]*p2[k]
     return s
-j
+
 
 def inplace_csr_row_normalize_array(X_data,
                                     X_indptr,
