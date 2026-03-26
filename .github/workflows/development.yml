@@ -1,0 +1,118 @@
+name: Development Workflow
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  setup-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Intel MKL
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install intel-mkl
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install 3.10
+
+      - name: Sync dependencies
+        # Synchronizes base, mkl extra, and dev groups (testing/docs)
+        run: uv sync --all-extras --all-groups
+
+      - name: Build wheel
+        run: uv build
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with: 
+          name: wheel
+          path: dist
+          retention-days: 1
+
+      - name: Lint with ruff
+        run: uv run ruff check --select=ALL --output-format=github src/
+        continue-on-error: true
+
+      - name: Tests without memory tracking
+        run: |
+          uv run pytest --junitxml=junit/test-results.xml --cov=stochmat --durations=0 -k 'not _memory'
+        env:
+          COVERAGE_FILE: ".coverage.no_memory"
+
+      - name: Store coverage file
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-no_memory
+          path: .coverage.no_memory
+          include-hidden-files: true
+
+  test-memory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Intel MKL
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install intel-mkl
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Tests with memory tracking
+        # Re-syncing is optimized by uv's global cache
+        run: |
+          uv sync --all-extras --all-groups
+          uv run pytest --junitxml=junit/test-results.xml --cov=stochmat --durations=0 --memray --most-allocations=0 -k '_memory'
+        env:
+          COVERAGE_FILE: ".coverage.memory"
+
+      - name: Store coverage file
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-memory
+          path: .coverage.memory
+          include-hidden-files: true
+
+  coverage:
+    name: combine-coverage
+    runs-on: ubuntu-latest
+    needs: [setup-and-test, test-memory]
+    if: always()
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+      - name: Coverage comment
+        id: coverage_comment
+        uses: py-cov-action/python-coverage-comment-action@v3
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_COVERAGE_FILES: true
+
+      - name: Store Pull Request comment
+        uses: actions/upload-artifact@v4
+        if: steps.coverage_comment.outputs.COMMENT_FILE_WRITTEN == 'true'
+        with:
+          name: python-coverage-comment-action
+          path: python-coverage-comment-action.txt
