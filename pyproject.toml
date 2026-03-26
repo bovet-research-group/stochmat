@@ -30,6 +30,8 @@ mkl = [
 [dependency-groups]
 testing = [
     "pytest>=9.0.2",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.8",
 ]
 docs = [
     "insegel>=1.3.1",
