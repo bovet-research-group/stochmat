@@ -13,49 +13,43 @@ jobs:
         pythonV: ["3.10", "3.11", "3.12", "3.13", "3.14"]
       fail-fast: false
     steps:
-    - uses: actions/checkout@v5
-      with:
-        lfs: 'true'
-        submodules: recursive
+      - uses: actions/checkout@v5
+        with:
+          lfs: 'true'
+          submodules: recursive
 
-    - name: Set up Python ${{ matrix.pythonV }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.pythonV }}
+      - name: Set up Python ${{ matrix.pythonV }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.pythonV }}
 
-    - name: Install Intel MKL
-      run: |
-        sudo apt-get update
-        sudo apt-get -y install intel-mkl
-
-    - name: Install uv
-      uses: astral-sh/setup-uv@v5
-      with:
-        enable-cache: true
-        cache-dependency-glob: "pyproject.toml"
-
-    - name: Set up Python
-      run: uv python install 3.10
-
-    - name: Sync dependencies
-      # Synchronizes base, mkl extra, and dev groups (testing/docs)
-      run: uv sync --all-extras --all-groups
-
-    - name: Lint with ruff
-      run: uv run ruff check --select=ALL --output-format=github src/
-      continue-on-error: true
-
-    - name: Tests without memory tracking
-      run: |
-        uv run pytest --junitxml=junit/test-results.xml --cov=stochmat --durations=0 -k 'not _memory'
-      env:
-        COVERAGE_FILE: ".coverage.no_memory"
-
-      - name: Tests with memory tracking
+      - name: Install Intel MKL
         run: |
-          uv run pytest --junitxml=junit/test-results.xml --cov=stochmat --durations=0 -k '_memory'
+          sudo apt-get update
+          sudo apt-get -y install intel-mkl
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install ${{ matrix.pythonV }}
+
+      - name: Sync dependencies
+        # Synchronizes base, mkl extra, and dev groups (testing/docs)
+        run: uv sync --all-extras --all-groups
+
+      - name: Lint with ruff
+        run: uv run ruff check --select=ALL --output-format=github src/
+        continue-on-error: true
+
+      - name: Tests without memory tracking
+        run: |
+          uv run pytest --junitxml=junit/test-results.xml --cov=stochmat --durations=0 -k 'not _memory'
         env:
-          COVERAGE_FILE: ".coverage.memory"
+          COVERAGE_FILE: ".coverage.no_memory"
 
       - name: Store coverage file
         if: matrix.pythonV == '3.10'
