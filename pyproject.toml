@@ -3,7 +3,7 @@ name = "stochmat"
 authors = [
     {name="Alexandre Bovet", email="alexandre.bovet@uzh.ch"},
     {name="Yasaman Asgari", email="yasaman.asgari@uzh.ch"},
-    {name="Jonas Liechti", email="j-i-l@t4d.ch"},
+    {name="Jonas I. Liechti", email="j-i-l@t4d.ch"},
 ]
 description = "A cython based library for fast, low-level operaitions on stochastic matrices."
 # Relative path to the README.md file
@@ -75,6 +75,7 @@ wheel.exclude = [
 
 [tool.setuptools_scm]
 # Configuration for dynamic version extraction from source control
+write_to = "src/stochmat/_version.py"
 
 [tool.coverage.run]
 relative_files = true
@@ -87,7 +88,6 @@ omit = [
 [tool.coverage.paths]
 source = [
     "src/stochmat",
-    "**/site-packages/stochmat"
 ]
 
 # This is for the linting with ruff
