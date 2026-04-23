@@ -28,7 +28,7 @@ def test_timing(capfd):
     log_message = "END"
     sleep_some(verbose=True, log_message=log_message)
     out, err = capfd.readouterr()
-    assert ~log_message.startswith("END")
+    assert not out.startswith("END")
     assert log_message in out
 
 
