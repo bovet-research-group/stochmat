@@ -49,15 +49,6 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/stochmat"]
 
-[build-system]
-requires = [
-  "scikit-build-core>=0.12.0",
-  "setuptools_scm>=8",
-  "cython",
-  "numpy"
-]
-build-backend = "scikit_build_core.build"
-
 # 2. Expand sdist inclusions to ensure reproducible compilation from source
 sdist.include = [
   "CMakeLists.txt",
@@ -105,3 +96,12 @@ ignore = ["T201"]
 # we want to accept import violations in special contexts
 "__init__.py" = ["E402"]
 "**/{tests,docs,tools}/*" = ["E402"]
+
+[build-system]
+requires = [
+  "scikit-build-core>=0.12.0",
+  "setuptools_scm>=8",
+  "cython",
+  "numpy"
+]
+build-backend = "scikit_build_core.build"
