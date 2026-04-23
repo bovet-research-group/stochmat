@@ -20,13 +20,15 @@
 """
 from __future__ import annotations
 
-import importlib.util
+import logging
 import os
 import time
 from collections.abc import Callable
 from copy import copy
 from functools import wraps
 import warnings
+
+_logger = logging.getLogger(__name__)
 
 from typing import Union
 import numpy as np
@@ -42,20 +44,33 @@ from scipy.sparse import (
 )
 from scipy.sparse._sparsetools import csr_scale_columns, csr_scale_rows
 
-if importlib.util.find_spec("cython") is not None:
+try:
     from . import _cython_sparse_stoch as _css
-else:
-    print("Could not load cython functions. Some functionality might be broken.")
+except ImportError:
+    _logger.warning(
+        "Could not load compiled cython extension "
+        "'%s._cython_sparse_stoch'; falling back to the pure-Python "
+        "substitute. Some functionality may be slower or unavailable.",
+        __package__,
+    )
     from . import _cython_subst as _css
 
-USE_SPARSE_DOT_MKL = True
-if importlib.util.find_spec("sparse_dot_mkl") is not None:
+USE_SPARSE_DOT_MKL = False
+dot_product_mkl = None
+gram_matrix_mkl = None
+try:
     from sparse_dot_mkl import dot_product_mkl, gram_matrix_mkl
-    from sparse_dot_mkl._mkl_interface import MKL
-    print("MKL_INT_NUMPY", MKL.MKL_INT_NUMPY)
-else:
-    USE_SPARSE_DOT_MKL = False
-    print("Could not load sparse_dot_mkl. Will use scipy.sparse for matrix products.")
+    USE_SPARSE_DOT_MKL = True
+except ImportError:
+    # sparse_dot_mkl not installed; use scipy.sparse fallbacks silently.
+    pass
+except OSError as _mkl_exc:
+    # Installed but its native MKL libs failed to load: worth surfacing.
+    _logger.warning(
+        "sparse_dot_mkl is installed but could not be loaded (%r); "
+        "falling back to scipy.sparse for matrix products.",
+        _mkl_exc,
+    )
 
 
 # timing decorator
