@@ -136,3 +136,14 @@ This installs the package in editable mode with MKL support, testing tools, and 
 On Ubuntu/Debian: `sudo apt-get install build-essential python3-dev`
 
 </details>
+
+#### Running tests with Cython coverage
+
+To measure coverage including Cython code (adds ~10-20% test runtime overhead):
+
+```sh
+CYTHON_COVERAGE=1 uv sync --all-extras --all-groups
+uv run pytest --cov=stochmat --cov-report=html
+```
+
+Open  `htmlcov/index.html` to view the coverage report.

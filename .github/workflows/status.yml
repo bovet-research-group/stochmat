@@ -40,6 +40,8 @@ jobs:
       - name: Sync dependencies
         # Synchronizes base, mkl extra, and dev groups (testing/docs)
         run: uv sync --all-extras --all-groups
+        env:
+          CYTHON_COVERAGE: "1"
 
       - name: Lint with ruff
         run: uv run ruff check --select=ALL --output-format=github src/

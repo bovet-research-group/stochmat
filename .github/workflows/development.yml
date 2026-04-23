@@ -36,6 +36,8 @@ jobs:
       - name: Sync dependencies
         # Synchronizes base, mkl extra, and dev groups (testing/docs)
         run: uv sync --all-extras --all-groups
+        env:
+          CYTHON_COVERAGE: "1"
 
       - name: Build wheel
         run: uv build
@@ -88,6 +90,7 @@ jobs:
           uv run pytest --junitxml=junit/test-results.xml --cov=stochmat --durations=0 --memray --most-allocations=0 -k '_memory'
         env:
           COVERAGE_FILE: ".coverage.memory"
+          CYTHON_COVERAGE: "1"
 
       - name: Store coverage file
         if: always()

@@ -1,6 +1,5 @@
 # distutils: language = c++
 # cython: profile=False
-# cython: linetrace=True
 
 """
 #
