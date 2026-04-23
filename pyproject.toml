@@ -46,26 +46,20 @@ dev = [
     { include-group = "docs" },
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/stochmat"]
-
-# 2. Expand sdist inclusions to ensure reproducible compilation from source
+[tool.scikit-build]
+metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
 sdist.include = [
   "CMakeLists.txt",
   "src/stochmat/*.pyx",
-  "src/stochmat/*.pxd"
+  "src/stochmat/*.pxd",
 ]
+editable.mode = 'inplace'
 wheel.packages = ["src/stochmat"]
-
-# 3. Explicitly exclude generated C/C++ artifacts from the final wheel
 wheel.exclude = [
   "src/stochmat/*.c",
   "src/stochmat/*.cxx",
-  "src/stochmat/*.cpp"
+  "src/stochmat/*.cpp",
 ]
-
-[tool.scikit-build]
-metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
 
 [tool.setuptools_scm]
 # Configuration for dynamic version extraction from source control

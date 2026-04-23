@@ -134,3 +134,15 @@ dmypy.json
 
 # vim
 *.swp
+
+# inplace compilation
+.cmake/
+.ninja_deps
+.ninja_log
+.skbuild-info.json
+CMakeCache.txt
+CMakeFiles/
+CMakeInit.txt
+*.cxx
+build.ninja
+cmake_install.cmake
