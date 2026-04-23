@@ -99,14 +99,23 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install coverage with Cython support
+        run: pip install coverage cython
+      
       - uses: actions/download-artifact@v4
         id: download
         with:
           pattern: coverage-*
           merge-multiple: true
-
+  
       - name: Update coverage badge
         uses: py-cov-action/python-coverage-comment-action@v3
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MERGE_COVERAGE_FILES: true
+          MERGE_COVERAGE_FILES: tru
