@@ -36,5 +36,5 @@ function(add_cython_cpp_module TARGET_NAME CYTHON_SOURCE)
 endfunction()
 
 # Define the modules to be built
-add_cython_cpp_module(_cython_fast_funcs "src/stochmat/_cython_fast_funcs.pyx")
+add_cython_cpp_module(fast "src/stochmat/fast.pyx")
 add_cython_cpp_module(_cython_sparse_stoch "src/stochmat/_cython_sparse_stoch.pyx")
