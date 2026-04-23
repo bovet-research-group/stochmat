@@ -72,11 +72,13 @@ source = ["src"]
 omit = [
   "tests",
   "*__init__.py",
+  "*/_version.py",
 ]
 
 [tool.coverage.paths]
 source = [
     "src/stochmat",
+    "*/site-packages/sotchmat",
 ]
 
 # This is for the linting with ruff

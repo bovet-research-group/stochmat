@@ -1,16 +1,23 @@
 name: Development Workflow
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
-    branches: [ main ]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+    branches:
+      - main
+permissions:
+  pull-requests: write
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.10"
 
 jobs:
   setup-and-test:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Intel MKL
         run: |
@@ -59,6 +66,7 @@ jobs:
           include-hidden-files: true
 
   test-memory:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -91,14 +99,14 @@ jobs:
 
   coverage:
     name: combine-coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [setup-and-test, test-memory]
     if: always()
     permissions:
       pull-requests: write
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
           pattern: coverage-*
