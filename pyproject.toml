@@ -67,7 +67,6 @@ wheel.exclude = [
 write_to = "src/stochmat/_version.py"
 
 [tool.coverage.run]
-plugins = ["Cython.Coverage"]
 relative_files = true
 source = ["src"]
 omit = [

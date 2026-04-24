@@ -40,8 +40,6 @@ jobs:
       - name: Sync dependencies
         # Synchronizes base, mkl extra, and dev groups (testing/docs)
         run: uv sync --all-extras --all-groups
-        env:
-          CYTHON_COVERAGE: "1"
 
       - name: Lint with ruff
         run: uv run ruff check --select=ALL --output-format=github src/
@@ -98,15 +96,6 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      
-      - name: Install coverage with Cython support
-        run: pip install coverage cython
-      
       - uses: actions/download-artifact@v4
         id: download
         with:
