@@ -6,8 +6,28 @@ on:
       - main
 
 jobs:
+  determine-python-version:
+    runs-on: ubuntu-latest
+    outputs:
+      min-version: ${{ steps.pyver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Determine minimum Python version from pyproject.toml
+        id: pyver
+        run: |
+          py_req=$(sed -n 's/^[[:space:]]*requires-python[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' pyproject.toml | head -n1)
+          py_min=$(echo "$py_req" | sed -n 's/.*>=[[:space:]]*\([0-9]\+\.[0-9]\+\).*/\1/p')
+          if [ -z "$py_min" ]; then
+            echo "Could not parse minimum Python version from requires-python='$py_req'" >&2
+            exit 1
+          fi
+          echo "version=$py_min" >> "$GITHUB_OUTPUT"
+          echo "Resolved minimum Python: $py_min"
+
   unit-tests:
     runs-on: ubuntu-24.04
+    needs: [determine-python-version]
     strategy:
       matrix:
         pythonV: ["3.10", "3.11", "3.12", "3.13", "3.14"]
@@ -52,7 +72,7 @@ jobs:
           COVERAGE_FILE: ".coverage.no_memory"
 
       - name: Store coverage file
-        if: matrix.pythonV == '3.10'
+        if: matrix.pythonV == needs.determine-python-version.outputs.min-version
         uses: actions/upload-artifact@v4
         with:
           name: coverage-no_memory
@@ -67,7 +87,7 @@ jobs:
           COVERAGE_FILE: ".coverage.memory"
 
       - name: Store coverage file
-        if: matrix.pythonV == '3.10'
+        if: matrix.pythonV == needs.determine-python-version.outputs.min-version
         uses: actions/upload-artifact@v4
         with:
           name: coverage-memory

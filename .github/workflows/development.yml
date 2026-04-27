@@ -9,15 +9,37 @@ permissions:
   pull-requests: write
   contents: write
 
-env:
-  PYTHON_VERSION: "3.10"
-
 jobs:
+  determine-python-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.pyver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Determine minimum Python version from pyproject.toml
+        id: pyver
+        run: |
+          py_req=$(sed -n 's/^[[:space:]]*requires-python[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' pyproject.toml | head -n1)
+          py_min=$(echo "$py_req" | sed -n 's/.*>=[[:space:]]*\([0-9]\+\.[0-9]\+\).*/\1/p')
+          if [ -z "$py_min" ]; then
+            echo "Could not parse minimum Python version from requires-python='$py_req'" >&2
+            exit 1
+          fi
+          echo "version=$py_min" >> "$GITHUB_OUTPUT"
+          echo "Resolved minimum Python: $py_min"
+
   setup-and-test:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    needs: [determine-python-version]
     steps:
       - uses: actions/checkout@v5
+
+      - name: Set up Python ${{ needs.determine-python-version.outputs.version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.determine-python-version.outputs.version }}
 
       - name: Install Intel MKL
         run: |
@@ -31,7 +53,7 @@ jobs:
           cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python
-        run: uv python install 3.10
+        run: uv python install ${{ needs.determine-python-version.outputs.version }}
 
       - name: Sync dependencies
         # Synchronizes base, mkl extra, and dev groups (testing/docs)
@@ -68,8 +90,14 @@ jobs:
   test-memory:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    needs: [determine-python-version]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - name: Set up Python ${{ needs.determine-python-version.outputs.version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.determine-python-version.outputs.version }}
 
       - name: Install Intel MKL
         run: |
@@ -80,6 +108,10 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install ${{ needs.determine-python-version.outputs.version }}
 
       - name: Tests with memory tracking
         # Re-syncing is optimized by uv's global cache
