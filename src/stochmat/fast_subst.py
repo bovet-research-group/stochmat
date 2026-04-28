@@ -33,16 +33,8 @@ def sum_Sto(S, k, ix_cf):
     float
         Stability gain value
     """
-    ix_cf_arr = np.array(ix_cf, dtype=np.int32)
-    delta_r = 0.0
-
-    # TODO: full numpy implementation (ditch loop)
-    for i in ix_cf_arr:
-        delta_r += S[k, i]
-        delta_r += S[i, k]
-    delta_r += S[k, k]
-
-    return delta_r
+    ix_cf_arr = np.asarray(ix_cf, dtype=np.intp)
+    return float(S[k, ix_cf_arr].sum() + S[ix_cf_arr, k].sum() + S[k, k])
 
 
 def sum_Sout(S, k, ix_ci):
@@ -65,16 +57,8 @@ def sum_Sout(S, k, ix_ci):
     float
         Stability gain value
     """
-    ix_ci_arr = np.array(ix_ci, dtype=np.int32)
-    delta_r = 0.0
-
-    # TODO: use native numpy (no python loop)
-    for i in ix_ci_arr:
-        delta_r -= S[k, i]
-        delta_r -= S[i, k]
-    delta_r += S[k, k]
-
-    return delta_r
+    ix_ci_arr = np.asarray(ix_ci, dtype=np.intp)
+    return float(-S[k, ix_ci_arr].sum() - S[ix_ci_arr, k].sum() + S[k, k])
 
 
 def compute_S(p1, p2, T):
@@ -131,14 +115,14 @@ def compute_S_0t0(p0, pt, T):
     pt = np.asarray(pt, dtype=np.float64)
     T = np.asarray(T, dtype=np.float64)
 
-    imax = T.shape[0]
-    S = np.zeros((imax, imax), dtype=np.float64)
+    # Avoid division by zero: where pt[k] == 0 the term contributes nothing.
+    inv_pt = np.zeros_like(pt)
+    nz = pt != 0
+    inv_pt[nz] = 1.0 / pt[nz]
 
-    for i in range(imax):
-        for j in range(imax):
-            for k in range(imax):
-                S[i, j] += p0[i] * T[i, k] * (1.0 / pt[k]) * T[j, k] * p0[j]
-            S[i, j] -= p0[i] * p0[j]
+    # M[i, j] = sum_k T[i, k] * inv_pt[k] * T[j, k]
+    M = (T * inv_pt) @ T.T
+    S = np.outer(p0, p0) * (M - 1.0)
 
     return S
 
@@ -166,38 +150,25 @@ def nmi(clusters1, clusters2, N, n1, n2):
     float
         Normalized mutual information value
     """
-    # Compute probability distributions
-    p1 = np.zeros(n1, dtype=np.float64)
-    p2 = np.zeros(n2, dtype=np.float64)
-    p12 = np.zeros(n1 * n2, dtype=np.float64)
+    # Cluster sizes and joint counts
+    sizes1 = np.fromiter((len(c) for c in clusters1), dtype=np.float64, count=n1)
+    sizes2 = np.fromiter((len(c) for c in clusters2), dtype=np.float64, count=n2)
+    inter = np.array(
+        [[len(c1.intersection(c2)) for c2 in clusters2] for c1 in clusters1],
+        dtype=np.float64,
+    )
 
-    k = 0
-    for i, clust1 in enumerate(clusters1):
-        p1[i] = len(clust1) / N
-        for j, clust2 in enumerate(clusters2):
-            p12[k] = len(clust1.intersection(clust2)) / N
-            k += 1
+    p1 = sizes1 / N
+    p2 = sizes2 / N
+    p12 = inter / N
 
-    for j, clust2 in enumerate(clusters2):
-        p2[j] = len(clust2) / N
+    def _entropy(p):
+        p = p[p != 0]
+        return -np.sum(p * np.log2(p))
 
-    # Compute Shannon entropies
-    H1 = 0.0
-    H2 = 0.0
-    H12 = 0.0
-
-    # TODO use proper numpy operatios, (np.sum with !=0 condition)
-    for i in range(n1):
-        if p1[i] != 0:
-            H1 -= p1[i] * np.log2(p1[i])
-
-    for j in range(n2):
-        if p2[j] != 0:
-            H2 -= p2[j] * np.log2(p2[j])
-
-    for j in range(n1 * n2):
-        if p12[j] != 0:
-            H12 -= p12[j] * np.log2(p12[j])
+    H1 = _entropy(p1)
+    H2 = _entropy(p2)
+    H12 = _entropy(p12)
 
     # Return normalized mutual information
     return (H1 + H2 - H12) / max(H1, H2)
@@ -224,27 +195,23 @@ def nvi(clusters1, clusters2, N):
     """
     n1 = len(clusters1)
     n2 = len(clusters2)
-    VI = 0.0
 
-    # Loop over pairs of clusters
-    for i in range(n1):
-        clust1 = clusters1[i]
-        ni = float(len(clust1))
-        n_inter = 0
+    sizes1 = np.fromiter((len(c) for c in clusters1), dtype=np.float64, count=n1)
+    sizes2 = np.fromiter((len(c) for c in clusters2), dtype=np.float64, count=n2)
+    inter = np.array(
+        [[len(c1.intersection(c2)) for c2 in clusters2] for c1 in clusters1],
+        dtype=np.float64,
+    )
 
-        for j in range(n2):
-            clust2 = clusters2[j]
-            l_inter = len(clust1.intersection(clust2))
-            nij = float(l_inter)
-            n_inter += l_inter
-
-            if nij > 0:
-                nj = float(len(clust2))
-                VI -= nij * np.log2((nij * nij) / (ni * nj))
-
-            if n_inter >= ni:
-                # We have found all possible intersections
-                break
+    # ni * nj outer product, then compute -nij * log2(nij^2 / (ni * nj))
+    # only for entries where nij > 0.
+    mask = inter > 0
+    ni_nj = np.outer(sizes1, sizes2)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        log_terms = np.where(
+            mask, np.log2((inter * inter) / np.where(mask, ni_nj, 1.0)), 0.0
+        )
+    VI = -np.sum(inter * log_terms)
 
     return VI / (float(N) * np.log2(float(N)))
 
@@ -327,7 +294,7 @@ def nvi_mat(clusters1, clusters2, N):
         Always raised; matrix version requires compiled Cython extension
     """
     raise NotImplementedError(
-        "nvi_mat is not implemented in the pure Python fallback. "
+        "nvi_mat (matrix-based version) is not implemented in the pure Python fallback. "
         "Please use nvi instead, or ensure the Cython extension module "
         "'stochmat.fast' is properly compiled."
     )
