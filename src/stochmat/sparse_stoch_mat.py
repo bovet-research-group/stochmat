@@ -55,6 +55,19 @@ except ImportError:
     )
     from . import _cython_subst as _css
 
+USE_FAST = False
+try:
+    from . import fast
+    USE_FAST = True
+except ImportError:
+    _logger.warning(
+        "Could not load compiled cython extension "
+        "'%s.fast'; falling back to the pure-Python substitute. "
+        "Some functionality may be slower.",
+        __package__,
+    )
+    from . import fast_subst as fast
+
 USE_SPARSE_DOT_MKL = False
 dot_product_mkl = None
 gram_matrix_mkl = None

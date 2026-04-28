@@ -113,13 +113,13 @@ def compute_S_0t0(double[:] p0, double[:] pt, double[:,:] T):
 
 @cython.boundscheck(False)  # Deactivate bounds checking
 @cython.wraparound(False)   # Deactivate negative indexing            
-def cython_nmi(list clusters1, list clusters2, int N, int n1, int n2):
+def nmi(list clusters1, list clusters2, int N, int n1, int n2):
     """ Computes normalized mutual information
     
         Call:
         -----
         
-        cython_nmi(list clusters1, list clusters2, int N, int n1, int n2)
+        nmi(list clusters1, list clusters2, int N, int n1, int n2)
     
     """
     # loop over pairs of clusters
@@ -164,13 +164,13 @@ def cython_nmi(list clusters1, list clusters2, int N, int n1, int n2):
 @cython.wraparound(False)   # Deactivate negative indexing   
 @cython.cdivision(True)
 @cython.nonecheck(True)
-def cython_nvi(list clusters1, list clusters2, int N):
+def nvi(list clusters1, list clusters2, int N):
     """ Computes normalized variation of information
     
         Call:
         -----
         
-        cython_nvi(list clusters1, list clusters2, int N)
+        nvi(list clusters1, list clusters2, int N)
     
     """
     # loop over pairs of clusters
@@ -208,13 +208,13 @@ def cython_nvi(list clusters1, list clusters2, int N):
 @cython.wraparound(False)   # Deactivate negative indexing   
 @cython.cdivision(True)
 @cython.nonecheck(True)
-def cython_nvi_parallel(list clusters1, list clusters2, int N, int num_threads):
+def nvi_parallel(list clusters1, list clusters2, int N, int num_threads):
     """ Computes normalized variation of information with a parallelized loop
     
         Call:
         -----
         
-        cython_nvi(list clusters1, list clusters2, int N)
+        nvi_parallel(list clusters1, list clusters2, int N)
     
     """
     # loop over pairs of clusters
@@ -256,13 +256,13 @@ def cython_nvi_parallel(list clusters1, list clusters2, int N, int num_threads):
 @cython.wraparound(False)   # Deactivate negative indexing   
 @cython.cdivision(True)
 @cython.nonecheck(False)
-def cython_nvi_vectors(list clusters1, list clusters2, int N):
+def nvi_vectors(list clusters1, list clusters2, int N):
     """ Computes normalized variation of information
     
         Call:
         -----
         
-        cython_nvi(list clusters1, list clusters2, int N)
+        nvi_vectors(list clusters1, list clusters2, int N)
     
     """
     cdef double ni 
@@ -316,15 +316,15 @@ def cython_nvi_vectors(list clusters1, list clusters2, int N):
 @cython.wraparound(False)   # Deactivate negative indexing   
 @cython.cdivision(True)
 @cython.nonecheck(False)
-def cython_nvi_mat(list clusters1, list clusters2, int N):
+def nvi_mat(list clusters1, list clusters2, int N):
     """ Computes normalized variation of information
     
         Call:
         -----
         
-        cython_nvi(list clusters1, list clusters2, int N)
+        nvi_mat(list clusters1, list clusters2, int N)
     
-        # this is slower that cython_nvi
+        # this is slower that nvi
     """
 
     #creates csc sparse indicator matrices for clusters1 and 2
@@ -387,15 +387,15 @@ def cython_nvi_mat(list clusters1, list clusters2, int N):
 @cython.wraparound(False)   # Deactivate negative indexing   
 @cython.cdivision(True)
 @cython.nonecheck(False)
-def cython_nvi_mat_test(list clusters1, list clusters2, int N):
+def nvi_mat_test(list clusters1, list clusters2, int N):
     """ Computes normalized variation of information
     
         Call:
         -----
         
-        cython_nvi(list clusters1, list clusters2, int N)
+        nvi_mat_test(list clusters1, list clusters2, int N)
     
-        # this is slower that cython_nvi
+        # this is slower that nvi
     """
 
     #creates csc sparse indicator matrices for clusters1 and 2
