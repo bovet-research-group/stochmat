@@ -600,3 +600,58 @@ def test_dimensional_assertions():
 
     with pytest.raises(AssertionError):
         inplace_diag_matmul_csr(A, wrong_vec)
+
+
+def test_fast_import_fallback(caplog):
+    """Reload ``sparse_stoch_mat`` with ``stochmat.fast`` masked.
+
+    Verifies that when the compiled ``stochmat.fast`` extension cannot be
+    imported, the module falls back to ``stochmat.fast_subst``, sets
+    ``USE_FAST = False`` and emits a warning log message.
+    """
+    import importlib
+    import logging
+    import sys
+
+    import stochmat
+    import stochmat.sparse_stoch_mat as ssm
+    import stochmat.fast_subst as fast_subst
+
+    saved_modules = {
+        name: sys.modules.get(name)
+        for name in ("stochmat.fast", "stochmat.sparse_stoch_mat")
+    }
+    saved_fast_attr = getattr(stochmat, "fast", None)
+
+    try:
+        # Setting an entry to ``None`` makes ``import`` raise ImportError
+        # without ever executing the real module.
+        sys.modules["stochmat.fast"] = None
+        # Also drop the cached attribute on the parent package so
+        # ``from . import fast`` actually consults the import machinery.
+        if hasattr(stochmat, "fast"):
+            delattr(stochmat, "fast")
+        # Force re-import of sparse_stoch_mat so the try/except runs again.
+        sys.modules.pop("stochmat.sparse_stoch_mat", None)
+
+        with caplog.at_level(
+            logging.WARNING, logger="stochmat.sparse_stoch_mat"
+        ):
+            reloaded = importlib.import_module("stochmat.sparse_stoch_mat")
+
+        assert reloaded.USE_FAST is False
+        assert reloaded.fast is fast_subst
+        assert "stochmat.fast" in caplog.text
+        assert "falling back" in caplog.text.lower()
+    finally:
+        # Restore the original module objects so subsequent tests are
+        # unaffected.
+        for name, mod in saved_modules.items():
+            if mod is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = mod
+        if saved_fast_attr is not None:
+            stochmat.fast = saved_fast_attr
+        # Re-import to make sure the package state is fully restored.
+        importlib.reload(ssm)
