@@ -371,7 +371,22 @@ def aggregate_csr_mat(Adata,
 
         performs B.shape[0]**2 operations
     """
-    raise NotImplementedError
+    Bdata = []
+    Brows = []
+    Bcols = []
+    new_size = idxptr.shape[0] - 1
+
+    for row in range(new_size):
+        row_idx = idxs_array[idxptr[row]:idxptr[row + 1]]
+        for col in range(new_size):
+            col_idx = idxs_array[idxptr[col]:idxptr[col + 1]]
+            pt = get_submat_sum(Adata, Aindices, Aindptr, row_idx, col_idx)
+            if pt > 0.0:
+                Bdata.append(pt)
+                Brows.append(row)
+                Bcols.append(col)
+
+    return Bdata, Brows, Bcols, new_size
 
 
 def aggregate_csr_mat_2(Adata,
@@ -384,7 +399,26 @@ def aggregate_csr_mat_2(Adata,
         and returns a coo matrix B
         Performs Adata.size operations
     """
-    raise NotImplementedError
+    Bdata = []
+    Brows = []
+    Bcols = []
+    new_size = idxptr.shape[0] - 1
+
+    # map indices of A to indices of B
+    AtoB = {}
+    for kb in range(new_size):
+        for ka in range(idxptr[kb], idxptr[kb + 1]):
+            AtoB[int(idxs_array[ka])] = kb
+
+    # loop over values of A
+    for row in range(Aindptr.shape[0] - 1):
+        for k in range(Aindptr[row], Aindptr[row + 1]):
+            col = Aindices[k]
+            Bdata.append(Adata[k])
+            Brows.append(AtoB[int(row)])
+            Bcols.append(AtoB[int(col)])
+
+    return Bdata, Brows, Bcols, new_size
 
 
 def compute_delta_PT_moveto(PTdata,
@@ -502,16 +536,16 @@ def compute_delta_PT_moveout(PTdata,
     return s
 
 
-def cython_compute_delta_S_moveout(PTdata,
-                                   PTindices,
-                                   PTindptr,
-                                   PTcscdata,
-                                   PTcscindices,
-                                   PTcscindptr,
-                                   k: int,
-                                   idx,
-                                   p1,
-                                   p2) -> float:
+def compute_delta_S_moveout(PTdata,
+                            PTindices,
+                            PTindptr,
+                            PTcscdata,
+                            PTcscindices,
+                            PTcscindptr,
+                            k: int,
+                            idx,
+                            p1,
+                            p2) -> float:
     """ return the gain in stability obtained by moving node
         k outside of the community defined by index list in idx.
 
