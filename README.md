@@ -97,6 +97,19 @@ Or with uv:
 uv pip install "stochmat[mkl] @ git+https://github.com/bovet-research-group/stochmat.git"
 ```
 
+> **Important — `[mkl]` is a hard runtime dependency.**
+> Installing `stochmat[mkl]` pulls in
+> [`sparse-dot-mkl`](https://pypi.org/project/sparse-dot-mkl/), which in turn
+> requires Intel MKL shared libraries (e.g. `libmkl_rt.so`) to be loadable
+> at runtime. **stochmat will refuse to import** (raising `ImportError` with
+> an actionable message) if `sparse_dot_mkl` is installed but the MKL
+> libraries are missing.
+>
+> If you build stochmat from source with `[mkl]`, ensure MKL is installed
+> on the build/host machine *before* running `pip install`. If you do not
+> need MKL acceleration, install plain `stochmat` (no extra) and SciPy will
+> be used as a transparent fallback for sparse matrix products.
+
 <details>
 <summary><b>Development installation</b></summary>
 

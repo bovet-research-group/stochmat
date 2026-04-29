@@ -71,19 +71,34 @@ except ImportError:
 USE_SPARSE_DOT_MKL = False
 dot_product_mkl = None
 gram_matrix_mkl = None
-try:
-    from sparse_dot_mkl import dot_product_mkl, gram_matrix_mkl
+# Detect whether the user opted into the optional ``[mkl]`` extra by checking
+# whether ``sparse_dot_mkl`` is *installed* (independent of whether its native
+# MKL libraries can be loaded). We intentionally use ``find_spec`` here rather
+# than a bare ``try/except ImportError`` because ``sparse_dot_mkl``'s own
+# ``__init__`` raises ``ImportError`` when the MKL shared libraries cannot be
+# loaded -- we must distinguish that case from "package not installed at all".
+import importlib.util as _importlib_util  # noqa: E402
+
+if _importlib_util.find_spec("sparse_dot_mkl") is not None:
+    # User opted into the [mkl] extra. MKL system libraries are now a HARD
+    # dependency: fail fast with an actionable message if they are missing.
+    try:
+        from sparse_dot_mkl import dot_product_mkl, gram_matrix_mkl
+    except (ImportError, OSError) as _mkl_exc:
+        raise ImportError(
+            "stochmat was installed with the [mkl] extra, which requires "
+            "Intel MKL shared libraries to be loadable at runtime, but "
+            "'sparse_dot_mkl' could not be imported "
+            f"({type(_mkl_exc).__name__}: {_mkl_exc}).\n"
+            "Either:\n"
+            "  - install Intel MKL system libraries (e.g. "
+            "'conda install mkl', the Intel oneAPI base toolkit, or your "
+            "distribution's MKL package such as 'apt-get install "
+            "intel-mkl'), or\n"
+            "  - reinstall stochmat WITHOUT the [mkl] extra "
+            "(e.g. 'pip install stochmat')."
+        ) from _mkl_exc
     USE_SPARSE_DOT_MKL = True
-except ImportError:
-    # sparse_dot_mkl not installed; use scipy.sparse fallbacks silently.
-    pass
-except OSError as _mkl_exc:
-    # Installed but its native MKL libs failed to load: worth surfacing.
-    _logger.warning(
-        "sparse_dot_mkl is installed but could not be loaded (%r); "
-        "falling back to scipy.sparse for matrix products.",
-        _mkl_exc,
-    )
 
 
 # timing decorator

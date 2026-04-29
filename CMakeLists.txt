@@ -1,6 +1,24 @@
 cmake_minimum_required(VERSION 3.21...3.28)
 project(stochmat LANGUAGES C CXX)
 
+# Allow opting out of building the Cython/C++ extension modules. When disabled
+# the package falls back to the pure-Python implementations in
+# ``stochmat._cython_subst`` and ``stochmat.fast_subst``.
+# Controlled by either the CMake option STOCHMAT_BUILD_EXTENSIONS or the
+# environment variable of the same name (env var takes precedence so the
+# build can be toggled without editing build args).
+option(STOCHMAT_BUILD_EXTENSIONS "Build the compiled Cython extension modules" ON)
+if(DEFINED ENV{STOCHMAT_BUILD_EXTENSIONS})
+    set(STOCHMAT_BUILD_EXTENSIONS $ENV{STOCHMAT_BUILD_EXTENSIONS})
+endif()
+
+if(NOT STOCHMAT_BUILD_EXTENSIONS)
+    message(STATUS
+        "STOCHMAT_BUILD_EXTENSIONS is OFF: skipping compiled extensions; "
+        "the pure-Python fallback will be used at runtime.")
+    return()
+endif()
+
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module NumPy)
 
 # Define common compile options for all Cython modules

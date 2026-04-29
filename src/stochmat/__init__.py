@@ -13,8 +13,14 @@ sparse stochastic (row-normalized) matrices, including:
   optionally dispatch to compiled (Cython / MKL) backends.
 
 The package transparently falls back to pure-Python implementations when the
-compiled extensions (``stochmat.fast``, ``stochmat._cython_sparse_stoch``) or
-optional MKL acceleration (``sparse_dot_mkl``) are unavailable.
+compiled extensions (``stochmat.fast``, ``stochmat._cython_sparse_stoch``) are
+unavailable. The optional MKL acceleration (``sparse_dot_mkl``), in contrast,
+is treated as a **hard runtime dependency once opted into**: if
+``sparse_dot_mkl`` is installed but the underlying Intel MKL shared libraries
+cannot be loaded, ``import stochmat`` will raise ``ImportError`` with an
+actionable message rather than silently falling back. See the README section
+"Optional: Intel MKL for better performance" for installation guidance.
+
 The module-level flags :data:`USE_FAST` and :data:`USE_SPARSE_DOT_MKL` indicate
 which backends are active in the current process.
 """
