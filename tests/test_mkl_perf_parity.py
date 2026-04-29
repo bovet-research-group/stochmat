@@ -3,18 +3,22 @@
 Two complementary checks against the scipy.sparse fallback:
 
 1. **Speed parity** -- ``pytest-benchmark`` records wall-clock medians for
-   both backends (recorded as informational benchmark output) and asserts
-   a generous backstop: MKL must not be more than 2x slower than scipy.
-   This catches regressions like accidental dense conversion without
-   penalizing minor noise.
-2. **Memory parity** -- Peak heap allocation (via ``tracemalloc``) is
-   measured for both backends. Both numbers are reported via
-   ``request.node.add_report_section`` for visibility, and a loose
-   backstop asserts MKL peak <= 2.5x scipy peak.
+   both backends in the two ``test_sparse_matmul_speed_{mkl,scipy}`` tests
+   (recorded as informational benchmark output). A separate
+   ``test_sparse_matmul_speed_parity_backstop`` test does its own
+   ``time.perf_counter`` timing and asserts a generous regression backstop:
+   MKL must not be more than 2x slower than scipy.
+2. **Peak-allocation parity** -- ``test_sparse_matmul_peak_alloc_parity``
+   measures peak heap allocation (via ``tracemalloc``) for both backends.
+   Both numbers are reported via ``request.node.add_report_section`` for
+   visibility; a loose backstop asserts MKL peak <= 2.5x scipy peak.
 
-These tests are marked ``@pytest.mark.benchmark`` so they can be filtered
-into the dedicated ``mkl-benchmarks`` CI job and out of the regular test
-runs.
+Only the two ``_speed_{mkl,scipy}`` recording tests carry the
+``@pytest.mark.benchmark`` marker (they use the ``benchmark`` fixture);
+the backstop and peak-allocation tests run in the regular test suite so
+that regressions are caught without needing to opt into the benchmarks
+job. The dedicated ``mkl-benchmarks`` CI job filters in via
+``-m benchmark`` to record the medians.
 
 All tests require the MKL backend to be active (``require_mkl`` fixture).
 """
@@ -62,9 +66,8 @@ def test_sparse_matmul_speed_scipy(
     benchmark(_matmul_with_backend, A, B, mkl=False)
 
 
-@pytest.mark.benchmark(group="sparse_matmul")
 def test_sparse_matmul_speed_parity_backstop(
-    require_mkl, mkl_canonical_sparse, benchmark, request
+    require_mkl, mkl_canonical_sparse, request
 ):
     """Sanity backstop: MKL must not be more than 2x slower than scipy.
 
@@ -111,7 +114,7 @@ def test_sparse_matmul_speed_parity_backstop(
 
 
 # ---------------------------------------------------------------------------
-# Memory parity
+# Peak-allocation parity
 # ---------------------------------------------------------------------------
 
 def _measure_peak(callable_, *args, **kwargs):
@@ -129,8 +132,7 @@ def _measure_peak(callable_, *args, **kwargs):
     return peak
 
 
-@pytest.mark.benchmark(group="sparse_matmul_memory")
-def test_sparse_matmul_memory_parity(
+def test_sparse_matmul_peak_alloc_parity(
     require_mkl, mkl_canonical_sparse, request
 ):
     """Compare MKL vs scipy peak heap allocation for sparse_matmul.
@@ -139,6 +141,11 @@ def test_sparse_matmul_memory_parity(
     asserts MKL peak <= 2.5x scipy peak to catch egregious regressions
     (e.g. accidental dense intermediate); transient MKL scratch buffers
     can legitimately bump the ratio above 1.0 on small-to-medium inputs.
+
+    Named ``peak_alloc`` rather than ``memory`` so that the
+    ``-k _memory`` filter used by the dedicated memory-tracing CI job
+    does not pick this test up (it would conflict with memray's own
+    instrumentation if both were active).
     """
     A, B = mkl_canonical_sparse
 
@@ -159,7 +166,7 @@ def test_sparse_matmul_memory_parity(
         f"  threshold = 2.5x"
     )
     print(msg)
-    request.node.add_report_section("call", "memory_parity", msg)
+    request.node.add_report_section("call", "peak_alloc_parity", msg)
 
     assert ratio <= 2.5, (
         f"MKL sparse_matmul peak memory is {ratio:.2f}x scipy "
