@@ -56,7 +56,9 @@ jobs:
         run: uv python install ${{ needs.determine-python-version.outputs.version }}
 
       - name: Sync dependencies
-        # Synchronizes base, mkl extra, and dev groups (testing/docs)
+        # Synchronizes base, mkl extra, and dev groups (testing-mkl/docs).
+        # ``--all-extras`` covers [mkl]; ``--all-groups`` pulls
+        # ``testing-mkl`` (which itself includes ``testing``).
         run: uv sync --all-extras --all-groups
 
       - name: Build wheel
@@ -74,8 +76,10 @@ jobs:
         continue-on-error: true
 
       - name: Tests without memory tracking
+        # Exclude memory tests (handled by ``test-memory``) and benchmark
+        # tests (handled by ``mkl-benchmarks``). Parity tests stay in.
         run: |
-          uv run pytest --junitxml=junit/test-results.xml --cov=stochmat --durations=0 -k 'not _memory'
+          uv run pytest --junitxml=junit/test-results.xml --cov=stochmat --durations=0 -k 'not _memory' -m 'not benchmark'
         env:
           COVERAGE_FILE: ".coverage.no_memory"
 
@@ -114,10 +118,12 @@ jobs:
         run: uv python install ${{ needs.determine-python-version.outputs.version }}
 
       - name: Tests with memory tracking
-        # Re-syncing is optimized by uv's global cache
+        # Re-syncing is optimized by uv's global cache. Exclude
+        # ``benchmark``-marked tests; they are handled by the dedicated
+        # ``mkl-benchmarks`` job.
         run: |
           uv sync --all-extras --all-groups
-          uv run pytest --junitxml=junit/test-results.xml --cov=stochmat --durations=0 --memray --most-allocations=0 -k '_memory'
+          uv run pytest --junitxml=junit/test-results.xml --cov=stochmat --durations=0 --memray --most-allocations=0 -k '_memory' -m 'not benchmark'
         env:
           COVERAGE_FILE: ".coverage.memory"
 
@@ -129,10 +135,143 @@ jobs:
           path: .coverage.memory
           include-hidden-files: true
 
+  test-pure-python:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    needs: [determine-python-version]
+    env:
+      # Disable building the Cython extensions; the package falls back to the
+      # pure-Python implementations in ``_cython_subst`` and ``fast_subst``.
+      STOCHMAT_BUILD_EXTENSIONS: "0"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python ${{ needs.determine-python-version.outputs.version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.determine-python-version.outputs.version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install ${{ needs.determine-python-version.outputs.version }}
+
+      - name: Sync dependencies (no Cython extensions, no MKL)
+        # MKL extra is intentionally omitted: the pure-Python build must
+        # not require system MKL or the optional ``sparse_dot_mkl``
+        # package -- the runtime fail-fast in
+        # ``stochmat.sparse_stoch_mat`` would otherwise raise
+        # ``ImportError`` because no MKL libs are installed on this job.
+        # Use the ``testing`` group explicitly (NOT ``testing-mkl``).
+        run: uv sync --no-default-groups --group testing
+
+      - name: Verify compiled extensions are absent
+        run: |
+          uv run python -c "
+          import importlib, sys
+          for mod in ('stochmat._cython_sparse_stoch', 'stochmat.fast'):
+              try:
+                  m = importlib.import_module(mod)
+              except ImportError:
+                  print(f'{mod}: not importable (expected for fast/_cython_sparse_stoch C-extension)')
+                  continue
+              # ``stochmat.fast`` is rebound to the pure-Python fallback when
+              # the compiled extension is missing; check for that.
+              if getattr(m, '__file__', '').endswith('.py'):
+                  print(f'{mod}: pure-Python fallback active ({m.__file__})')
+              else:
+                  print(f'{mod}: compiled extension loaded ({m.__file__})', file=sys.stderr)
+                  sys.exit(1)
+          import stochmat.sparse_stoch_mat as ssm
+          assert not ssm.USE_FAST, 'USE_FAST should be False without compiled fast extension'
+          print('USE_FAST =', ssm.USE_FAST)
+          "
+
+      - name: Tests (pure-Python, parity tests excluded)
+        # Parity tests require both the compiled and the fallback modules to
+        # be importable; tests that depend on the ``fast_modules`` fixture
+        # (e.g. ``test_fast_fallback.py``) auto-skip via the importorskip
+        # guard inside that fixture. Memory tests are handled by the
+        # dedicated ``test-memory`` job; benchmark tests by
+        # ``mkl-benchmarks``.
+        run: |
+          uv run pytest \
+            --junitxml=junit/test-results.xml \
+            --cov=stochmat \
+            --durations=0 \
+            -k 'not parity and not _memory' \
+            -m 'not benchmark'
+        env:
+          COVERAGE_FILE: ".coverage.pure_python"
+
+      - name: Store coverage file
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-pure_python
+          path: .coverage.pure_python
+          include-hidden-files: true
+
+  mkl-benchmarks:
+    # MKL speed/memory parity benchmarks. Non-blocking: this job uploads
+    # benchmark JSON + per-test report sections as artifacts but its
+    # outcome does not gate the PR (continue-on-error: true).
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    needs: [determine-python-version]
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python ${{ needs.determine-python-version.outputs.version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.determine-python-version.outputs.version }}
+
+      - name: Install Intel MKL
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install intel-mkl
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install ${{ needs.determine-python-version.outputs.version }}
+
+      - name: Sync dependencies (testing-mkl group, includes pytest-benchmark)
+        run: uv sync --all-extras --all-groups
+
+      - name: Run MKL benchmark + memory parity tests
+        run: |
+          uv run pytest \
+            -m benchmark \
+            --benchmark-json=benchmark.json \
+            --durations=0 \
+            -v
+        # Test-internal asserts (2x speed backstop, 2.5x memory backstop)
+        # may legitimately fail on noisy CI runners; surface those without
+        # failing the PR.
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mkl-benchmark-results
+          path: benchmark.json
+          if-no-files-found: warn
+
   coverage:
     name: combine-coverage
     runs-on: ubuntu-24.04
-    needs: [setup-and-test, test-memory]
+    needs: [setup-and-test, test-memory, test-pure-python]
     if: always()
     permissions:
       pull-requests: write
