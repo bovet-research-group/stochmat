@@ -1340,16 +1340,70 @@ def sparse_matmul(A, B, verbose=False, log_message=""):
 
 
 @timing
-def sparse_gram_matrix(A, transpose, verbose=False, log_message=""):
-    """If transpose is True, returns A @ A.T
-    else, returns A.T @ A
+def sparse_gram_matrix(A, transpose, symmetrize=None,
+                       verbose=False, log_message=""):
+    """Compute the Gram matrix of a sparse matrix ``A``.
 
-    If USE_SPARSE_DOT_MKL returns a matrix with only the upper triangle filled.
+    If ``transpose`` is ``True``, returns ``A @ A.T``;
+    otherwise, returns ``A.T @ A``.
 
+    Parameters
+    ----------
+    A : scipy.sparse matrix
+        Input sparse matrix.
+    transpose : bool
+        If ``True``, compute ``A @ A.T``; otherwise compute ``A.T @ A``.
+    symmetrize : bool or None, optional
+        Controls the shape of the returned matrix:
+
+        - ``None`` (default): **legacy backend-dependent behavior** kept
+          for backwards compatibility. When the MKL backend is active
+          (``USE_SPARSE_DOT_MKL is True``), only the upper triangle of
+          the (symmetric) Gram matrix is returned, matching
+          ``sparse_dot_mkl.gram_matrix_mkl``'s native contract. When the
+          scipy fallback is used, the full symmetric matrix is returned.
+        - ``True``: always return the full symmetric Gram matrix,
+          regardless of backend. The MKL output is symmetrized via
+          ``out + out.T - diag(out.diagonal())`` before being returned.
+        - ``False``: always return only the upper triangle. The scipy
+          output is post-processed via ``scipy.sparse.triu``.
+
+        For new code, prefer passing an explicit ``symmetrize`` value to
+        get a backend-uniform contract.
+
+    Returns
+    -------
+    scipy.sparse matrix
+        The Gram matrix; shape depends on ``symmetrize`` (see above).
+
+    Notes
+    -----
+    The default ``symmetrize=None`` preserves the historical, undocumented
+    asymmetry between backends. This is intentional for backwards
+    compatibility; downstream code that depends on the upper-triangle-only
+    MKL output continues to work unchanged.
     """
     if USE_SPARSE_DOT_MKL:
-        return gram_matrix_mkl(A, transpose=transpose)
-    elif transpose:
-        return A @ A.T
+        out = gram_matrix_mkl(A, transpose=transpose)
+        if symmetrize is True:
+            from scipy.sparse import diags as _sp_diags
+            # MKL returns upper triangle only; reflect across the
+            # diagonal and subtract the (now double-counted) diagonal.
+            diag = _sp_diags(out.diagonal(), format=out.format)
+            out = out + out.T - diag
+        # symmetrize is False or None: return MKL's native upper-triangle
+        # output unchanged (these two branches collapse for the MKL path
+        # because MKL's native shape already matches symmetrize=False).
+        return out
+
+    # scipy fallback
+    if transpose:
+        out = A @ A.T
     else:
-        return A.T @ A
+        out = A.T @ A
+    if symmetrize is False:
+        from scipy.sparse import triu as _sp_triu
+        out = _sp_triu(out).asformat(getattr(out, "format", "csr"))
+    # symmetrize is True or None: full symmetric matrix is the natural
+    # scipy result; nothing to do.
+    return out
