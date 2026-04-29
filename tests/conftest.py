@@ -18,8 +18,22 @@ def fast_modules():
     Returns a ``SimpleNamespace`` with attributes:
         - ``cython``: the compiled ``stochmat.fast`` module.
         - ``fallback``: the pure-Python ``stochmat.fast_subst`` module.
+
+    Skips dependent tests when the compiled ``stochmat.fast`` extension is
+    not built (e.g. when installing with ``STOCHMAT_BUILD_EXTENSIONS=0``).
     """
-    import stochmat.fast as fast_cython
+    fast_cython = pytest.importorskip(
+        "stochmat.fast",
+        reason="compiled Cython extension 'stochmat.fast' not available",
+    )
+    # Guard against the case where ``stochmat.fast`` resolves to a
+    # pure-Python module rebound by ``sparse_stoch_mat`` — in that case we
+    # do not have a separate compiled implementation to compare against.
+    if getattr(fast_cython, "__file__", "").endswith(".py"):
+        pytest.skip(
+            "stochmat.fast resolved to the pure-Python fallback; "
+            "no compiled extension to compare against"
+        )
     from stochmat import fast_subst
     return SimpleNamespace(cython=fast_cython, fallback=fast_subst)
 
@@ -334,6 +348,59 @@ def get_temporal_network_df_minimal():
 def sparse_format(request):
     """Parameterize tests to run against both CSR and CSC formats."""
     return request.param
+
+
+@pytest.fixture(scope='session')
+def require_mkl():
+    """Skip dependent tests unless the MKL backend is fully active.
+
+    A test using this fixture only runs when:
+      1. ``sparse_dot_mkl`` is importable (i.e. the [mkl] extra was
+         installed), AND
+      2. ``stochmat.USE_SPARSE_DOT_MKL`` is ``True`` after import (i.e.
+         the runtime fail-fast in ``stochmat.sparse_stoch_mat`` confirmed
+         that the MKL native libraries are loadable).
+
+    Note: if (1) is true but the MKL libs are missing, importing stochmat
+    raises ``ImportError`` (by design), so this fixture would never reach
+    the second check in that scenario; the importorskip on stochmat itself
+    would have already failed at collection time.
+    """
+    pytest.importorskip(
+        "sparse_dot_mkl",
+        reason="sparse_dot_mkl not installed (the [mkl] extra is absent)",
+    )
+    import stochmat
+    if not stochmat.USE_SPARSE_DOT_MKL:
+        pytest.skip("stochmat MKL backend not active")
+    return True
+
+
+@pytest.fixture(scope='session')
+def mkl_canonical_sparse():
+    """Canonical (n, density) sparse matrix pair for MKL parity benchmarks.
+
+    Returns ``(A, B)`` where both are square scipy.sparse CSR matrices of
+    the same shape with float64 data. The shape (5000) and density
+    (0.001 -> ~25k nnz) are tuned so that:
+      - pytest-benchmark medians stabilize below ~1s/iteration on CI;
+      - matrix products produce non-trivial fill (~2.5x input nnz);
+      - peak memory remains well below the 8GB CI runner cap.
+    """
+    rng = np.random.default_rng(20251029)
+    n = 5000
+    density = 0.001
+    nnz = int(n * n * density)
+
+    def _make():
+        rows = rng.integers(0, n, size=nnz, dtype=np.int32)
+        cols = rng.integers(0, n, size=nnz, dtype=np.int32)
+        data = rng.standard_normal(nnz).astype(np.float64)
+        m = csr_matrix((data, (rows, cols)), shape=(n, n))
+        m.sum_duplicates()
+        return m
+
+    return _make(), _make()
 
 
 @pytest.fixture

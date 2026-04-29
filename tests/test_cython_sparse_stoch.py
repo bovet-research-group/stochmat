@@ -2,6 +2,15 @@ import numpy as np
 import pytest
 from scipy import sparse
 
+# This file exercises the compiled Cython extension directly. When the
+# extension is not built (e.g. ``STOCHMAT_BUILD_EXTENSIONS=0``) the whole
+# module is skipped — equivalent functionality is covered by the fallback
+# parity tests in ``test_cython_subst.py``.
+pytest.importorskip(
+    "stochmat._cython_sparse_stoch",
+    reason="compiled Cython extension not available",
+)
+
 # Assuming the functions are imported from the compiled cython module.
 # For testing the transition, both should be temporarily accessible.
 from stochmat._cython_sparse_stoch import (
