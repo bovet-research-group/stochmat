@@ -21,6 +21,14 @@ endif()
 
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module NumPy)
 
+# OpenMP is required: ``stochmat.fast`` uses ``cython.parallel.prange``.
+# - Linux/gcc: libgomp is linked implicitly but we still want explicit linkage
+#   so the wheel manifest is correct (auditwheel/repair-wheel can locate it).
+# - macOS/clang: needs ``brew install libomp`` and the OpenMP_ROOT hint
+#   (set via the ``[tool.cibuildwheel.macos]`` environment block).
+# - Windows/MSVC: resolves to the ``/openmp`` flag automatically.
+find_package(OpenMP REQUIRED)
+
 # Define common compile options for all Cython modules
 add_library(stochmat_compile_options INTERFACE)
 target_compile_options(stochmat_compile_options INTERFACE -O3)
@@ -53,7 +61,10 @@ function(add_cython_cpp_module TARGET_NAME CYTHON_SOURCE)
     )
     
     Python_add_library(${TARGET_NAME} MODULE WITH_SOABI "${GENERATED_CXX_FILE}")
-    target_link_libraries(${TARGET_NAME} PRIVATE Python::NumPy stochmat_compile_options)
+    target_link_libraries(${TARGET_NAME} PRIVATE
+        Python::NumPy
+        stochmat_compile_options
+        OpenMP::OpenMP_CXX)
     
     # Add C compile-time macros for coverage if enabled
     if(DEFINED ENV{CYTHON_COVERAGE})

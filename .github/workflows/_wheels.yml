@@ -1,0 +1,79 @@
+# Reusable workflow that builds wheels (cibuildwheel matrix) and an sdist.
+#
+# Called by:
+#   * release.yml      -- on tag push, then publishes to PyPI
+#   * test_release.yml -- on workflow_dispatch, then publishes to TestPyPI
+#
+# Artifacts uploaded:
+#   * cibw-wheels-<os>-<arch>   (one per matrix cell)
+#   * cibw-sdist                (single tarball)
+# Callers re-download with actions/download-artifact and a "cibw-*" pattern.
+
+name: Build wheels (reusable)
+
+on:
+  workflow_call: {}
+
+jobs:
+  build_wheels:
+    name: wheels ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux
+          - os: ubuntu-latest
+            arch: x86_64
+          - os: ubuntu-latest
+            arch: aarch64
+          # macOS: macos-13 = Intel runner, macos-14 = Apple Silicon runner.
+          # Pinning by runner image (rather than cross-compiling from one)
+          # gives native test execution and avoids ARCHFLAGS hacks.
+          - os: macos-13
+            arch: x86_64
+          - os: macos-14
+            arch: arm64
+          # Windows
+          - os: windows-latest
+            arch: AMD64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # setuptools_scm needs the full history (or at least tags) to
+          # resolve the version dynamically.
+          fetch-depth: 0
+
+      # QEMU is only needed for cross-arch Linux builds (aarch64 on x86 host).
+      - name: Set up QEMU
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.21
+        env:
+          CIBW_ARCHS: ${{ matrix.arch }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cibw-wheels-${{ matrix.os }}-${{ matrix.arch }}
+          path: ./wheelhouse/*.whl
+
+  build_sdist:
+    name: sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build sdist
+        run: pipx run build --sdist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cibw-sdist
+          path: dist/*.tar.gz
