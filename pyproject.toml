@@ -119,3 +119,42 @@ requires = [
   "numpy"
 ]
 build-backend = "scikit_build_core.build"
+
+# ---------------------------------------------------------------------------
+# cibuildwheel configuration (used by .github/workflows/_wheels.yml).
+#
+# Build matrix:
+#   * CPython 3.10 -- 3.14 only (PyPy is skipped: cpyext makes Cython modules
+#     slower than CPython, and ``sparse-dot-mkl`` does not target PyPy).
+#   * musllinux skipped (low demand, doubles Linux build time).
+# Tests run inside cibuildwheel are an import-only smoke check; the full
+# pytest suite runs in development.yml on the source tree, not on the wheel.
+# ---------------------------------------------------------------------------
+[tool.cibuildwheel]
+build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
+skip = ["*-musllinux_*", "pp*"]
+build-verbosity = 1
+test-requires = ["numpy", "scipy"]
+test-command = "python -c \"import stochmat; print(stochmat.backends.summary())\""
+# QEMU-emulated aarch64 builds are far too slow to run pytest on; the
+# import-smoke above already exercises module loading + OpenMP linkage.
+test-skip = "*-*linux_aarch64"
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64", "aarch64"]
+manylinux-x86_64-image = "manylinux2014"
+manylinux-aarch64-image = "manylinux2014"
+# libgomp ships in the manylinux images; nothing extra to install.
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+before-all = "brew install libomp"
+# Homebrew installs libomp under /opt/homebrew on Apple Silicon and
+# /usr/local on Intel; the OpenMP_ROOT hint lets CMake's FindOpenMP pick
+# it up regardless of host architecture (cibuildwheel sets ARCHFLAGS for
+# cross-compilation between x86_64 and arm64 runners).
+environment = { MACOSX_DEPLOYMENT_TARGET = "11.0", OpenMP_ROOT = "/opt/homebrew/opt/libomp", LDFLAGS = "-L/opt/homebrew/opt/libomp/lib -L/usr/local/opt/libomp/lib", CPPFLAGS = "-I/opt/homebrew/opt/libomp/include -I/usr/local/opt/libomp/include" }
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
+# MSVC's /openmp is built-in; CMake's FindOpenMP discovers it automatically.

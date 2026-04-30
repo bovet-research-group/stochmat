@@ -143,6 +143,7 @@ jobs:
       # Disable building the Cython extensions; the package falls back to the
       # pure-Python implementations in ``_cython_subst`` and ``fast_subst``.
       STOCHMAT_BUILD_EXTENSIONS: "0"
+      UV_NO_SYNC: "1"  # prevent from fetching dev group
     steps:
       - uses: actions/checkout@v5
 

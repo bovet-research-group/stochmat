@@ -31,22 +31,83 @@ def test_sparse_stoch_from_full_csr(cs_matrix_creator):
     np.testing.assert_equal(ssm_args_subst[4], ssm_args[4])
 
 
-def test_inplace_csr_row_normalize(cs_matrix_creator):
+def test_inplace_csr_row_normalize():
+    """Verify in-place row normalization against a deterministic input.
+
+    Historically this test built its matrix via the ``cs_matrix_creator``
+    fixture (100000x100000 with 1000 random nonzeros) and asserted that
+    ``A_csr.data`` had changed after calling
+    ``inplace_csr_row_normalize(..., n_row=333, row_sum=1)``. Two
+    independent issues conspired:
+
+    * ``n_row`` is the *count* of leading rows to normalize (the
+      implementation iterates ``range(n_row)``), not an index — so the
+      original test was normalizing rows ``[0, 333)``, not row 333.
+    * With density 1e-4, almost every leading row was either empty or a
+      single self-loop with value ``1.0`` (added by the fixture for
+      zero-sum rows). Normalizing those to ``row_sum=1`` is a bit-exact
+      no-op, so the "data changed" assertion fired on roughly 99% of
+      unseeded RNG states. The test only "passed" by luck when several
+      of the leading rows happened to land multiple random nonzeros that
+      summed to a value not bit-exactly equal to 1.0.
+
+    The new construction pins down a deterministic dense-ish input,
+    normalizes every row, and asserts:
+
+    * each (post-normalization) row sums to ``row_sum`` -- the actual
+      contract of the function, and
+    * the compiled ``_css`` and pure-Python ``_cython_subst`` paths
+      produce bit-equivalent results (parity).
     """
-    """
+    from scipy.sparse import csr_matrix
+
     from stochmat._cython_subst import inplace_csr_row_normalize as icrn_subst
     from stochmat.sparse_stoch_mat import _css
-    A_csr = cs_matrix_creator(nbr=1, size=100000, nbr_non_zeros=1000)[0]
+
+    size = 1000
+    # ``n_row`` is the *count* of leading rows to normalize (the function
+    # iterates ``range(n_row)``), not an index of a specific row.
+    n_row = size
+    row_sum = 1.0
+
+    rng = np.random.default_rng(20260430)
+    dense = rng.random((size, size))
+    dense[dense < 0.95] = 0.0
+    # Pin a couple of specific rows to known multi-entry contents that
+    # do not bit-exactly sum to ``row_sum`` so that normalization is a
+    # real (non-identity) operation we can post-condition on.
+    pinned_rows = (333, 777)
+    dense[333, :] = 0.0
+    dense[333, :5] = [2.0, 3.0, 5.0, 7.0, 11.0]  # sum = 28.0
+    dense[777, :] = 0.0
+    dense[777, :3] = [0.25, 0.75, 1.5]           # sum = 2.5
+    # Ensure no row is empty so every row has a well-defined normalization.
+    empty = np.where(dense.sum(axis=1) == 0)[0]
+    for r in empty:
+        dense[r, r] = 1.0
+
+    A_csr = csr_matrix(dense)
+    A_csr.data = A_csr.data.astype(np.float64, copy=False)
+    A_csr.indices = A_csr.indices.astype(np.int32, copy=False)
+    A_csr.indptr = A_csr.indptr.astype(np.int32, copy=False)
     B_csr = A_csr.copy()
-    n_row = 333
-    row_sum = 1
-    A_data_old = A_csr.data.copy()
-    _css.inplace_csr_row_normalize(A_csr.data, A_csr.indptr.astype(np.int64), n_row, row_sum)
+
+    _css.inplace_csr_row_normalize(
+        A_csr.data, A_csr.indptr.astype(np.int64), n_row, row_sum,
+    )
     icrn_subst(B_csr.data, B_csr.indptr, n_row, row_sum)
-    # make sure it changed
-    assert not np.array_equal(A_csr.data, A_data_old)
-    # make sure non-cython is equivalent
-    np.testing.assert_equal(A_csr.data, B_csr.data)
+
+    # Positive post-condition: every normalized row sums to ``row_sum``.
+    for r in pinned_rows:
+        np.testing.assert_allclose(A_csr[r].sum(), row_sum, rtol=1e-12)
+    np.testing.assert_allclose(
+        np.asarray(A_csr.sum(axis=1)).ravel(),
+        np.full(size, row_sum, dtype=np.float64),
+        rtol=1e-12,
+    )
+    # Parity: compiled (or its pure-Python substitute when no compiled
+    # extension is available) and the explicit pure-Python fallback agree.
+    np.testing.assert_allclose(A_csr.data, B_csr.data, rtol=1e-12, atol=0.0)
     
 
 def test_stoch_mat_add(SSM_matrix_creator, compare_SSM_args):
