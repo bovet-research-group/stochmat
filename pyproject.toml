@@ -17,7 +17,6 @@ dynamic = ["version"]
 
 dependencies = [
     "numpy>=2.2.6",
-    "pandas>=2.3.3",
     "scipy>=1.15.3",
 ]
 
@@ -35,6 +34,7 @@ testing = [
     # loaded; the pure-Python CI job intentionally has no MKL libs and would
     # therefore crash at ``import stochmat`` if this group pulled the extra.
     "memray>=1.19.2",
+    "pandas>=2.3.3",
     "pytest>=9.0.2",
     "pytest-cov>=7.1.0",
     "pytest-memray>=1.8.0",
