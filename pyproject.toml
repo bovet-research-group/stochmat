@@ -142,18 +142,28 @@ test-skip = "*-*linux_aarch64"
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
-manylinux-x86_64-image = "manylinux2014"
-manylinux-aarch64-image = "manylinux2014"
-# libgomp ships in the manylinux images; nothing extra to install.
+# scipy >= 1.15 (pinned via ``scipy>=1.15.3`` in ``project.dependencies``)
+# only ships ``manylinux_2_28+`` wheels. Building scipy from sdist on an
+# older base image fails on the test step (no OpenBLAS in the manylinux
+# 2014 image), and any end-user on glibc < 2.28 would hit the same
+# failure when ``pip install`` resolved scipy. Aligning our manylinux
+# floor with our hardest dependency keeps the wheel honest.
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
 before-all = "brew install libomp"
-# Homebrew installs libomp under /opt/homebrew on Apple Silicon and
-# /usr/local on Intel; the OpenMP_ROOT hint lets CMake's FindOpenMP pick
-# it up regardless of host architecture (cibuildwheel sets ARCHFLAGS for
-# cross-compilation between x86_64 and arm64 runners).
-environment = { MACOSX_DEPLOYMENT_TARGET = "11.0", OpenMP_ROOT = "/opt/homebrew/opt/libomp", LDFLAGS = "-L/opt/homebrew/opt/libomp/lib -L/usr/local/opt/libomp/lib", CPPFLAGS = "-I/opt/homebrew/opt/libomp/include -I/usr/local/opt/libomp/include" }
+
+[[tool.cibuildwheel.overrides]]
+select = "*-macosx_x86_64"
+environment = { MACOSX_DEPLOYMENT_TARGET = "11.0", OpenMP_ROOT = "/usr/local/opt/libomp", LDFLAGS = "-L/usr/local/opt/libomp/lib", CPPFLAGS = "-I/usr/local/opt/libomp/include" }
+
+[[tool.cibuildwheel.overrides]]
+select = "*-macosx_arm64"
+# Homebrew's libomp >= 22.x on Apple Silicon is built with a minimum
+# target of macOS 14;
+environment = { MACOSX_DEPLOYMENT_TARGET = "14.0", OpenMP_ROOT = "/opt/homebrew/opt/libomp", LDFLAGS = "-L/opt/homebrew/opt/libomp/lib", CPPFLAGS = "-I/opt/homebrew/opt/libomp/include" }
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
