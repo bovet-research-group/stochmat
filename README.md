@@ -186,3 +186,188 @@ uv run pytest --cov=stochmat --cov-report=html
 ```
 
 Open  `htmlcov/index.html` to view the coverage report.
+
+## Using stochmat as a dependency in another package
+
+If you build a downstream package (call it `downpkg`) on top of `stochmat`
+and want to give *your* users the same opt-in MKL story
+(`pip install downpkg` → SciPy fallback; `pip install downpkg[mkl]` →
+MKL-accelerated end-to-end), the layout below is the recommended
+template.
+
+### The constraint that drives the layout
+
+`stochmat[mkl]` is a **fail-fast hard runtime dependency** (see the MKL
+section above): if `sparse_dot_mkl` is importable in the environment but
+the Intel MKL shared libraries cannot be loaded, `import stochmat` (and
+therefore `import downpkg`) raises `ImportError` immediately. Two
+consequences:
+
+1. **Never pull `sparse-dot-mkl` (or `stochmat[mkl]`) into a dependency
+   set that runs on machines without MKL system libs** — including
+   `testing` / `dev` groups installed in pure-Python CI jobs. Same trap
+   `stochmat`'s own `pyproject.toml` documents.
+2. **Your downstream `[mkl]` extra must pull `stochmat[mkl]`, not just
+   `sparse-dot-mkl`.** Going through stochmat's extra is what activates
+   the MKL probe code path and avoids double-declaring the dependency.
+
+### `pyproject.toml` (PEP 621)
+
+```toml
+[project]
+name = "downpkg"
+requires-python = ">=3.10"
+dependencies = [
+    "stochmat>=X.Y",   # base: SciPy/numpy fallback path
+    # ...other base deps
+]
+
+[project.optional-dependencies]
+# Mirror stochmat's extra name 1:1 so users learn one convention.
+# This is the ONLY place sparse_dot_mkl enters downpkg's dep graph.
+mkl = [
+    "stochmat[mkl]>=X.Y",
+]
+
+[dependency-groups]
+testing = [
+    # IMPORTANT: do NOT include "stochmat[mkl]" or "sparse-dot-mkl" here.
+    # The pure-Python CI job installs this group on a runner without MKL
+    # libs; pulling sparse_dot_mkl would crash `import stochmat` at
+    # collection time (stochmat's MKL probe is fail-fast).
+    "pytest>=8",
+    # ...
+]
+
+testing-mkl = [
+    { include-group = "testing" },
+    "stochmat[mkl]>=X.Y",     # opt-in MKL test job
+]
+
+dev = [
+    { include-group = "testing" },
+    # NOT testing-mkl by default — let developers opt in explicitly so a
+    # fresh `uv sync` on a machine without MKL libs doesn't fail.
+]
+```
+
+The version requirement is repeated in `dependencies` and in the `mkl`
+extra on purpose — the extra is purely additive (it just turns the bare
+requirement into one carrying `[mkl]`); pip / uv intersect them and pick
+a single resolution. Pinning the version *only* inside the extra
+silently weakens the base requirement when users install without
+`[mkl]`.
+
+### Runtime usage (Pattern A, recommended)
+
+For the common case where `downpkg` is a thin wrapper that delegates to
+`stochmat.sparse_matmul`, `stochmat.sparse_gram_matrix`, etc., **no
+downstream code is required** to make MKL work. Those entry points read
+`stochmat.backends.mkl` at call time, so users get acceleration purely
+by installing `downpkg[mkl]`:
+
+```python
+import downpkg
+import stochmat
+print(stochmat.backends.summary())
+# {'cython_sparse_stoch': True, 'fast': True, 'mkl': True}
+```
+
+<details>
+<summary><b>Pattern B: re-export / aggregate the backend report</b></summary>
+
+If `downpkg` adds its *own* optional accelerators (e.g. a Numba code
+path) and wants a single diagnostic surface, expose a
+`downpkg.backends` submodule that defers to `stochmat.backends`:
+
+```python
+# downpkg/backends.py
+"""Active backend report for downpkg."""
+import stochmat
+
+
+def summary() -> dict[str, bool]:
+    return {
+        "stochmat_cython_sparse_stoch": stochmat.backends.cython_sparse_stoch,
+        "stochmat_fast": stochmat.backends.fast,
+        "stochmat_mkl": stochmat.backends.mkl,
+        # downpkg-specific accelerators here, e.g.:
+        # "downpkg_numba": _numba_loaded,
+    }
+
+
+__all__ = ["summary"]
+```
+
+Avoid binding `mkl = stochmat.backends.mkl` at module top-level — that
+captures a snapshot at import time and breaks if downstream tests
+monkey-patch the flag. Always look it up dynamically (as in `summary()`
+above) so the source of truth (`stochmat.backends.mkl`) stays
+authoritative.
+
+</details>
+
+<details>
+<summary><b>Note on the Cython extensions (no equivalent extra)</b></summary>
+
+The MKL story is install-time and **declarative** (an extra in
+`pyproject.toml`); the Cython story is build-time and **imperative**
+(an environment variable in the shell). They are not symmetric, and
+downstream `pyproject.toml` has nothing to declare for the Cython side.
+
+- **Wheels first.** When stochmat publishes pre-built wheels for the
+  user's platform/Python version, no C++ toolchain is required and
+  `pip install downpkg` just works. The discussion below only matters
+  for sdist installs (unsupported platforms, `--no-binary`, dev
+  installs from git). For build-from-source prerequisites, see the
+  "Note" at the end of the *Development installation* block above
+  (`build-essential python3-dev` on Ubuntu/Debian).
+- **The pure-Python escape hatch is an env var, not an extra.** End
+  users who want to skip the C++ build set
+  `STOCHMAT_BUILD_EXTENSIONS=0` *before* `pip install`; this flows
+  directly into stochmat's scikit-build-core / CMake build regardless
+  of whether the install was triggered transitively by `downpkg`.
+  Build-time env vars cannot be encoded in
+  `[project.optional-dependencies]`, so downstream cannot offer this
+  as a `downpkg[no-ext]` extra — your README can only forward the
+  knob to your users with a one-liner.
+- **Caveat for downstream code that uses `nvi_*`.** The pure-Python
+  fallback `stochmat.fast_subst` raises `NotImplementedError` for
+  `nvi_parallel`, `nvi_vectors`, and `nvi_mat`. If `downpkg` calls
+  any of those, a no-extensions install will work for everything
+  *except* those code paths; either skip them under
+  `not stochmat.backends.fast` or implement your own fallback.
+- **CI mirroring.** Add a third row to the CI table to validate the
+  fallback path:
+
+  | Job | Install | Purpose |
+  |---|---|---|
+  | `test-no-ext` | `STOCHMAT_BUILD_EXTENSIONS=0 pip install -e ".[testing]"` | Validates downstream code under stochmat's pure-Python fallback (`_cython_subst` / `fast_subst`). Tests touching `nvi_*` must skip when `not stochmat.backends.fast`. |
+
+</details>
+
+### Downstream README — copy-down warning
+
+Because the fail-fast behavior propagates through `import stochmat` into
+every downstream import, `downpkg`'s own README should carry the same
+caveat:
+
+> **`downpkg[mkl]` is a hard runtime dependency.** It pulls
+> `stochmat[mkl]`, which requires Intel MKL shared libraries to be
+> loadable at runtime. `import downpkg` will raise `ImportError` if
+> `sparse_dot_mkl` is installed but MKL libs are missing. If you do not
+> need MKL, install plain `downpkg` and SciPy will be used as a
+> transparent fallback.
+
+### Mirroring CI
+
+Two parallel jobs, same shape as stochmat's own workflow:
+
+| Job | Install | Purpose |
+|---|---|---|
+| `test-cpu` | `uv sync` (no extras) or `pip install -e ".[testing]"` | Validates the SciPy-fallback path; no MKL libs on the runner. |
+| `test-mkl` | `apt-get install intel-mkl` *then* `uv sync --group testing-mkl` or `pip install -e ".[mkl]" -e ".[testing]"` | Validates the MKL-accelerated path; system libs installed before pip. |
+
+The `test-cpu` job must **not** have `sparse-dot-mkl` in its lockfile
+or install set, for the same reason stochmat's own pure-Python CI job
+does not.
