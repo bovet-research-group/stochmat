@@ -357,8 +357,8 @@ def require_mkl():
     A test using this fixture only runs when:
       1. ``sparse_dot_mkl`` is importable (i.e. the [mkl] extra was
          installed), AND
-      2. ``stochmat.USE_SPARSE_DOT_MKL`` is ``True`` after import (i.e.
-         the runtime fail-fast in ``stochmat.sparse_stoch_mat`` confirmed
+      2. ``stochmat.backends.mkl`` is ``True`` after import (i.e.
+         the runtime fail-fast in ``stochmat.backends`` confirmed
          that the MKL native libraries are loadable).
 
     Note: if (1) is true but the MKL libs are missing, importing stochmat
@@ -371,7 +371,7 @@ def require_mkl():
         reason="sparse_dot_mkl not installed (the [mkl] extra is absent)",
     )
     import stochmat
-    if not stochmat.USE_SPARSE_DOT_MKL:
+    if not stochmat.backends.mkl:
         pytest.skip("stochmat MKL backend not active")
     return True
 

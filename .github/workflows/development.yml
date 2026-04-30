@@ -186,9 +186,9 @@ jobs:
               else:
                   print(f'{mod}: compiled extension loaded ({m.__file__})', file=sys.stderr)
                   sys.exit(1)
-          import stochmat.sparse_stoch_mat as ssm
-          assert not ssm.USE_FAST, 'USE_FAST should be False without compiled fast extension'
-          print('USE_FAST =', ssm.USE_FAST)
+          import stochmat
+          assert not stochmat.backends.fast, 'stochmat.backends.fast should be False without compiled fast extension'
+          print('stochmat.backends.summary() =', stochmat.backends.summary())
           "
 
       - name: Tests (pure-Python, parity tests excluded)

@@ -44,61 +44,18 @@ from scipy.sparse import (
 )
 from scipy.sparse._sparsetools import csr_scale_columns, csr_scale_rows
 
-try:
-    from . import _cython_sparse_stoch as _css
-except ImportError:
-    _logger.warning(
-        "Could not load compiled cython extension "
-        "'%s._cython_sparse_stoch'; falling back to the pure-Python "
-        "substitute. Some functionality may be slower or unavailable.",
-        __package__,
-    )
-    from . import _cython_subst as _css
+# Backend probes (resolved Cython extensions / MKL bindings) live in
+# ``stochmat.backends``. Importing it here both performs the probes
+# (with the documented MKL fail-fast behavior) and gives us a stable
+# handle for runtime dispatch -- ``_backends.mkl`` etc. are looked up
+# at call time so monkey-patching in tests works as expected.
+from . import backends as _backends  # noqa: E402
 
-USE_FAST = False
-try:
-    from . import fast
-    USE_FAST = True
-except ImportError:
-    _logger.warning(
-        "Could not load compiled cython extension "
-        "'%s.fast'; falling back to the pure-Python substitute. "
-        "Some functionality may be slower.",
-        __package__,
-    )
-    from . import fast_subst as fast
-
-USE_SPARSE_DOT_MKL = False
-dot_product_mkl = None
-gram_matrix_mkl = None
-# Detect whether the user opted into the optional ``[mkl]`` extra by checking
-# whether ``sparse_dot_mkl`` is *installed* (independent of whether its native
-# MKL libraries can be loaded). We intentionally use ``find_spec`` here rather
-# than a bare ``try/except ImportError`` because ``sparse_dot_mkl``'s own
-# ``__init__`` raises ``ImportError`` when the MKL shared libraries cannot be
-# loaded -- we must distinguish that case from "package not installed at all".
-import importlib.util as _importlib_util  # noqa: E402
-
-if _importlib_util.find_spec("sparse_dot_mkl") is not None:
-    # User opted into the [mkl] extra. MKL system libraries are now a HARD
-    # dependency: fail fast with an actionable message if they are missing.
-    try:
-        from sparse_dot_mkl import dot_product_mkl, gram_matrix_mkl
-    except (ImportError, OSError) as _mkl_exc:
-        raise ImportError(
-            "stochmat was installed with the [mkl] extra, which requires "
-            "Intel MKL shared libraries to be loadable at runtime, but "
-            "'sparse_dot_mkl' could not be imported "
-            f"({type(_mkl_exc).__name__}: {_mkl_exc}).\n"
-            "Either:\n"
-            "  - install Intel MKL system libraries (e.g. "
-            "'conda install mkl', the Intel oneAPI base toolkit, or your "
-            "distribution's MKL package such as 'apt-get install "
-            "intel-mkl'), or\n"
-            "  - reinstall stochmat WITHOUT the [mkl] extra "
-            "(e.g. 'pip install stochmat')."
-        ) from _mkl_exc
-    USE_SPARSE_DOT_MKL = True
+# Re-export the resolved (compiled or fallback) modules under the legacy
+# in-module names so the existing call sites and the package-level
+# ``stochmat.fast`` re-export continue to work transparently.
+_css = _backends._css
+fast = _backends._fast
 
 
 # timing decorator
@@ -1283,8 +1240,8 @@ def sparse_outer(p, use_mkl=True, triu=True, verbose=False, log_message=""):
     -------
     O : (N,N) csr sparse matrix.
 
-    If USE_SPARSE_DOT_MKL and use_mkl returns a matrix with only the upper
-    triangle filled.
+    If ``stochmat.backends.mkl`` and use_mkl, returns a matrix with only
+    the upper triangle filled.
 
     """
     assert isspmatrix_csr(p)
@@ -1293,13 +1250,13 @@ def sparse_outer(p, use_mkl=True, triu=True, verbose=False, log_message=""):
     p.eliminate_zeros()
     p.sort_indices()
 
-    if USE_SPARSE_DOT_MKL and use_mkl:
+    if _backends.mkl and use_mkl:
         if triu:
-            Odata = gram_matrix_mkl(
+            Odata = _backends._gram_matrix_mkl(
                 p.data.reshape(1, p.data.size)
             )[np.triu_indices(p.data.size)]
         else:
-            Odata = gram_matrix_mkl(
+            Odata = _backends._gram_matrix_mkl(
                 p.data.reshape(1, p.data.size)
             ).reshape(p.data.size**2, 1).squeeze()
     elif triu:
@@ -1333,8 +1290,8 @@ def sparse_matmul(A, B, verbose=False, log_message=""):
     """Sparse matrix multiplication.
     Uses sparse_dot_mkl if available, otherwise scipy sparse
     """
-    if USE_SPARSE_DOT_MKL:
-        return dot_product_mkl(A, B)
+    if _backends.mkl:
+        return _backends._dot_product_mkl(A, B)
     else:
         return A @ B
 
@@ -1358,7 +1315,7 @@ def sparse_gram_matrix(A, transpose, symmetrize=None,
 
         - ``None`` (default): **legacy backend-dependent behavior** kept
           for backwards compatibility. When the MKL backend is active
-          (``USE_SPARSE_DOT_MKL is True``), only the upper triangle of
+          (``stochmat.backends.mkl is True``), only the upper triangle of
           the (symmetric) Gram matrix is returned, matching
           ``sparse_dot_mkl.gram_matrix_mkl``'s native contract. When the
           scipy fallback is used, the full symmetric matrix is returned.
@@ -1383,8 +1340,8 @@ def sparse_gram_matrix(A, transpose, symmetrize=None,
     compatibility; downstream code that depends on the upper-triangle-only
     MKL output continues to work unchanged.
     """
-    if USE_SPARSE_DOT_MKL:
-        out = gram_matrix_mkl(A, transpose=transpose)
+    if _backends.mkl:
+        out = _backends._gram_matrix_mkl(A, transpose=transpose)
         if symmetrize is True:
             from scipy.sparse import diags as _sp_diags
             # MKL returns upper triangle only; reflect across the

@@ -6,9 +6,10 @@ These tests assert that the MKL-backed implementations of
 results (up to floating-point tolerance) to the pure scipy.sparse fallback.
 
 The MKL path is selected by the module-level flag
-``stochmat.sparse_stoch_mat.USE_SPARSE_DOT_MKL``; we toggle it via
-``monkeypatch`` to exercise both code paths within a single test process,
-sharing the input fixtures.
+``stochmat.backends.mkl``; we toggle it via ``monkeypatch`` to exercise
+both code paths within a single test process, sharing the input fixtures.
+``stochmat.sparse_stoch_mat`` reads ``stochmat.backends.mkl`` at call
+time, so the toggle is observed without reloading.
 
 All tests in this file require the MKL backend to be active (see the
 ``require_mkl`` fixture in ``conftest.py``); they will be skipped in the
@@ -17,27 +18,28 @@ pure-Python CI job.
 import numpy as np
 import pytest
 
+from stochmat import backends as _backends
 from stochmat import sparse_stoch_mat as ssm
 
 
 def _matmul_with_backend(A, B, *, mkl):
     """Call ``ssm.sparse_matmul`` with the MKL flag forced to ``mkl``."""
-    saved = ssm.USE_SPARSE_DOT_MKL
-    ssm.USE_SPARSE_DOT_MKL = mkl
+    saved = _backends.mkl
+    _backends.mkl = mkl
     try:
         return ssm.sparse_matmul(A, B)
     finally:
-        ssm.USE_SPARSE_DOT_MKL = saved
+        _backends.mkl = saved
 
 
 def _gram_with_backend(A, *, transpose, mkl, symmetrize=None):
-    saved = ssm.USE_SPARSE_DOT_MKL
-    ssm.USE_SPARSE_DOT_MKL = mkl
+    saved = _backends.mkl
+    _backends.mkl = mkl
     try:
         return ssm.sparse_gram_matrix(A, transpose=transpose,
                                       symmetrize=symmetrize)
     finally:
-        ssm.USE_SPARSE_DOT_MKL = saved
+        _backends.mkl = saved
 
 
 def test_sparse_matmul_mkl_vs_scipy(require_mkl, mkl_canonical_sparse):

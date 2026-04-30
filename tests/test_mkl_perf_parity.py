@@ -27,6 +27,7 @@ import tracemalloc
 
 import pytest
 
+from stochmat import backends as _backends
 from stochmat import sparse_stoch_mat as ssm
 
 
@@ -36,12 +37,12 @@ from stochmat import sparse_stoch_mat as ssm
 # ---------------------------------------------------------------------------
 
 def _matmul_with_backend(A, B, *, mkl):
-    saved = ssm.USE_SPARSE_DOT_MKL
-    ssm.USE_SPARSE_DOT_MKL = mkl
+    saved = _backends.mkl
+    _backends.mkl = mkl
     try:
         return ssm.sparse_matmul(A, B)
     finally:
-        ssm.USE_SPARSE_DOT_MKL = saved
+        _backends.mkl = saved
 
 
 # ---------------------------------------------------------------------------

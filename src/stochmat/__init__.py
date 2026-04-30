@@ -21,8 +21,12 @@ cannot be loaded, ``import stochmat`` will raise ``ImportError`` with an
 actionable message rather than silently falling back. See the README section
 "Optional: Intel MKL for better performance" for installation guidance.
 
-The module-level flags :data:`USE_FAST` and :data:`USE_SPARSE_DOT_MKL` indicate
-which backends are active in the current process.
+Use :mod:`stochmat.backends` to inspect which backends are active in the
+current process::
+
+    >>> import stochmat
+    >>> stochmat.backends.summary()
+    {'cython_sparse_stoch': True, 'fast': True, 'mkl': False}
 """
 try:
     # try to import version (provided by hatch (see pyproject.toml)
@@ -31,9 +35,8 @@ except ImportError:
     # Fallback if the package wasn't installed properly
     __version__ = "unknown"
 
+from . import backends  # noqa: F401
 from .sparse_stoch_mat import (  # noqa: F401
-    USE_FAST,
-    USE_SPARSE_DOT_MKL,
     inplace_csr_matmul_diag,
     inplace_csr_row_normalize,
     inplace_diag_matmul_csr,
@@ -46,8 +49,7 @@ from .sparse_stoch_mat import (  # noqa: F401
 
 __all__ = [
     "__version__",
-    "USE_FAST",
-    "USE_SPARSE_DOT_MKL",
+    "backends",
     "inplace_csr_matmul_diag",
     "inplace_csr_row_normalize",
     "inplace_diag_matmul_csr",

@@ -110,6 +110,32 @@ uv pip install "stochmat[mkl] @ git+https://github.com/bovet-research-group/stoc
 > need MKL acceleration, install plain `stochmat` (no extra) and SciPy will
 > be used as a transparent fallback for sparse matrix products.
 
+### Runtime backend flags
+
+`stochmat` ships two compiled Cython extensions
+(`stochmat._cython_sparse_stoch` and `stochmat.fast`) and integrates the
+optional `sparse_dot_mkl` backend. Each has a transparent pure-Python
+fallback. The `stochmat.backends` submodule exposes three boolean
+attributes that report which backend is active in the current process:
+
+| Attribute | `True` when… | Fallback when `False` |
+|---|---|---|
+| `stochmat.backends.cython_sparse_stoch` | the compiled `_cython_sparse_stoch` extension loaded successfully | pure-Python `_cython_subst` (functionally complete, slower) |
+| `stochmat.backends.fast` | the compiled `fast` extension loaded successfully | pure-Python `fast_subst` — note that `nvi_parallel`, `nvi_vectors`, and `nvi_mat` raise `NotImplementedError` in the fallback |
+| `stochmat.backends.mkl` | the `[mkl]` extra is installed *and* MKL native libraries are loadable | SciPy's native sparse matmul (`A @ B`) |
+
+Quick check:
+
+```python
+import stochmat
+print(stochmat.backends.summary())
+# {'cython_sparse_stoch': True, 'fast': True, 'mkl': False}
+```
+
+When a compiled extension cannot be loaded, a warning is emitted via the
+`stochmat.backends` logger. See the MKL section above for the
+fail-fast behavior specific to `[mkl]`.
+
 <details>
 <summary><b>Development installation</b></summary>
 
