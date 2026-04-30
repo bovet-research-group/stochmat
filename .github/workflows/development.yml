@@ -273,7 +273,7 @@ jobs:
     name: combine-coverage
     runs-on: ubuntu-24.04
     needs: [setup-and-test, test-memory, test-pure-python]
-    if: always()
+    if: always() && github.event.pull_request.draft == false
     permissions:
       pull-requests: write
       contents: write
