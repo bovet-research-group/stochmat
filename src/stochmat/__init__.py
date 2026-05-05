@@ -47,6 +47,20 @@ from .sparse_stoch_mat import (  # noqa: F401
     fast,
 )
 
+# ---------------------------------------------------------------------------
+# Backward-compatibility alias.
+#
+# Older releases exposed a module-level boolean ``USE_SPARSE_DOT_MKL`` that
+# mirrored what is now :data:`stochmat.backends.mkl`. The public API was
+# consolidated in :mod:`stochmat.backends` (single source of truth), but
+# downstream packages -- notably ``flow_stability`` -- still import the
+# legacy name. Re-export it here so existing consumers keep working.
+#
+# New code should use :data:`stochmat.backends.mkl` (or
+# :func:`stochmat.backends.summary`) directly. This alias is frozen at
+# import time, matching the behaviour of the underlying flag.
+USE_SPARSE_DOT_MKL: bool = backends.mkl
+
 __all__ = [
     "__version__",
     "backends",
@@ -58,4 +72,5 @@ __all__ = [
     "SparseAutocovMat",
     "SparseStochMat",
     "fast",
+    "USE_SPARSE_DOT_MKL",
 ]
