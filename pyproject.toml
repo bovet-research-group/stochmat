@@ -153,28 +153,23 @@ manylinux-aarch64-image = "manylinux_2_28"
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
 before-all = "brew install libomp"
-# Per-arch environment lives in the [[tool.cibuildwheel.overrides]] blocks
-# below. Homebrew installs libomp under /opt/homebrew on Apple Silicon and
-# /usr/local on Intel; keeping the prefixes split per arch avoids the
-# "ld: warning: search path ... not found" linker noise we used to emit
-# on each runner (the other prefix is never present on a given host).
-#
-# MACOSX_DEPLOYMENT_TARGET is pinned to 14.0 on both arches because:
-#   * Homebrew's current ``libomp`` bottle is ``arm64_sonoma`` /
-#     ``sonoma`` (min macOS 14.0); delocate refuses to package a 14.0
-#     dylib into an ``11.0`` wheel.
-#   * ``numpy>=2.2.6`` only ships ``macosx_14_0_arm64`` wheels (no 11.0
-#     arm64 wheels exist), so consumers on macOS <14 cannot install the
-#     dependency stack regardless of what target we advertise.
-# This drops support for macOS 11/12/13 from our published wheels.
-
-[[tool.cibuildwheel.overrides]]
-select = "*-macosx_arm64"
-environment = { MACOSX_DEPLOYMENT_TARGET = "14.0", OpenMP_ROOT = "/opt/homebrew/opt/libomp", LDFLAGS = "-L/opt/homebrew/opt/libomp/lib", CPPFLAGS = "-I/opt/homebrew/opt/libomp/include" }
+# Homebrew's libomp 22.x is built with a minimum target of macOS 14 on
+# *both* Intel and Apple Silicon as of 2026, so delocate-wheel rejects
+# bundling it into wheels claiming an older floor. We accept a 14.0
+# floor on both arches; macOS 11-13 users fall back to the sdist (which
+# still builds with a working compiler + libomp). The per-arch override
+# blocks below stay split so the OpenMP search paths can keep matching
+# Homebrew's per-arch prefix (/usr/local on Intel, /opt/homebrew on
+# arm64), and so we can diverge the floors again if Homebrew ships a
+# back-compat libomp formula on one arch.
 
 [[tool.cibuildwheel.overrides]]
 select = "*-macosx_x86_64"
 environment = { MACOSX_DEPLOYMENT_TARGET = "14.0", OpenMP_ROOT = "/usr/local/opt/libomp", LDFLAGS = "-L/usr/local/opt/libomp/lib", CPPFLAGS = "-I/usr/local/opt/libomp/include" }
+
+[[tool.cibuildwheel.overrides]]
+select = "*-macosx_arm64"
+environment = { MACOSX_DEPLOYMENT_TARGET = "14.0", OpenMP_ROOT = "/opt/homebrew/opt/libomp", LDFLAGS = "-L/opt/homebrew/opt/libomp/lib", CPPFLAGS = "-I/opt/homebrew/opt/libomp/include" }
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]

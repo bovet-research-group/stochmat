@@ -19,6 +19,12 @@ jobs:
   build:
     name: Build artifacts
     uses: ./.github/workflows/_wheels.yml
+    with:
+      # TestPyPI rejects PEP 440 local version segments (the ``+gSHA``
+      # suffix setuptools_scm appends on non-tag commits). Stripping it
+      # here -- and only here -- keeps PyPI releases and local dev
+      # installs unaffected.
+      strip-local-version: true
 
   publish_testpypi:
     name: Publish to TestPyPI

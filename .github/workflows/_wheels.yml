@@ -12,7 +12,20 @@
 name: Build wheels (reusable)
 
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      strip-local-version:
+        description: >-
+          When true, build wheels and the sdist with
+          ``SETUPTOOLS_SCM_LOCAL_SCHEME=no-local-version`` so the
+          ``+gSHA`` local version segment is omitted. Required for
+          uploads to TestPyPI (which rejects PEP 440 local versions per
+          packaging.python.org); the default ``false`` keeps the SHA so
+          local dev installs and PyPI releases (which are tagged anyway,
+          so have no local segment) are unaffected.
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   build_wheels:
@@ -54,6 +67,19 @@ jobs:
         with:
           platforms: arm64
 
+      # Strip the setuptools_scm ``+gSHA`` local segment when the caller
+      # asks for it (TestPyPI uploads). Writing to ``$GITHUB_ENV`` makes
+      # the var visible to subsequent steps; ``CIBW_ENVIRONMENT_PASS_LINUX``
+      # is what cibuildwheel uses to forward host env vars across the
+      # manylinux container boundary on Linux runners (no-op on macOS /
+      # Windows where the build runs natively and inherits env directly).
+      - name: Configure local-version stripping
+        if: inputs.strip-local-version
+        shell: bash
+        run: |
+          echo "SETUPTOOLS_SCM_LOCAL_SCHEME=no-local-version" >> "$GITHUB_ENV"
+          echo "CIBW_ENVIRONMENT_PASS_LINUX=SETUPTOOLS_SCM_LOCAL_SCHEME" >> "$GITHUB_ENV"
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.21
         env:
@@ -73,6 +99,11 @@ jobs:
           fetch-depth: 0
 
       - name: Build sdist
+        env:
+          # See ``Configure local-version stripping`` in build_wheels;
+          # sdist is built directly on the runner so plain step-level
+          # env is enough (no container boundary to cross).
+          SETUPTOOLS_SCM_LOCAL_SCHEME: ${{ inputs.strip-local-version && 'no-local-version' || '' }}
         run: pipx run build --sdist
 
       - uses: actions/upload-artifact@v4
