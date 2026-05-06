@@ -142,14 +142,13 @@ test-skip = "*-*linux_aarch64"
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
-# scipy >= 1.15 (pinned via ``scipy>=1.15.3`` in ``project.dependencies``)
-# only ships ``manylinux_2_28+`` wheels. Building scipy from sdist on an
-# older base image fails on the test step (no OpenBLAS in the manylinux
-# 2014 image), and any end-user on glibc < 2.28 would hit the same
-# failure when ``pip install`` resolved scipy. Aligning our manylinux
-# floor with our hardest dependency keeps the wheel honest.
+# scipy>=1.15 dropped manylinux2014 wheels; use manylinux_2_28 so the
+# in-container ``test_command`` venv can ``pip install`` a prebuilt
+# scipy wheel instead of falling back to an sdist build that needs
+# OpenBLAS (which is not available in the cibuildwheel image).
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
+# libgomp ships in the manylinux images; nothing extra to install.
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
