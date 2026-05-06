@@ -27,10 +27,12 @@ jobs:
             arch: x86_64
           - os: ubuntu-latest
             arch: aarch64
-          # macOS: macos-13 = Intel runner, macos-14 = Apple Silicon runner.
+          # macOS: macos-15-intel = Intel runner, macos-14 = Apple Silicon.
           # Pinning by runner image (rather than cross-compiling from one)
-          # gives native test execution and avoids ARCHFLAGS hacks.
-          - os: macos-13
+          # gives native test execution and avoids ARCHFLAGS hacks. The
+          # legacy ``macos-13`` label was deprecated by GitHub; jobs that
+          # request it queue indefinitely.
+          - os: macos-15-intel
             arch: x86_64
           - os: macos-14
             arch: arm64
